@@ -1,0 +1,15 @@
+{
+  "name": "stream-to-iptv",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/varmakarthik12/stream-to-iptv.git",
+  "author": "Karthik",
+  "license": "MIT",
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "scripts": {
+    "dev": "nodemon -e go --signal SIGTERM --exec yarn dev:run",
+    "dev:run": "go run ./cmd/*.go -config ./config.json"
+  }
+}
