@@ -17,7 +17,7 @@ func StartFFmpeg(stream stream.Stream) error {
 		"-hls_segment_filename", filepath.Join(utils.GetStreamPath(utils.GetBaseFolder(), stream.Name), `segment_%03d.ts`),
 		filepath.Join(utils.GetStreamPath(utils.GetBaseFolder(), stream.Name), utils.GetStreamFileName(stream.Name)))
 
-	logrus.Debugf("Command used: %s", ffmpegCmd.String())
+	logrus.Infof("Triggered: %s", ffmpegCmd.String())
 
 	if err := ffmpegCmd.Start(); err != nil {
 		return fmt.Errorf("failed to start FFmpeg for stream %s: %v", stream.Name, err)

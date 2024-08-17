@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-
+	defer utils.CleanTempDir()
 	port := utils.GetPort()
 
 	err := initStream(port)
@@ -31,8 +31,6 @@ func main() {
 		// TODO: implement M3U IPTV playlist
 	})
 
-	// Start the HTTP server
-	logrus.Infof("Starting server on port :%s", port)
 	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), r); err != nil {
 		logrus.Fatalf("Failed to start server: %v", err)
 	}
