@@ -60,6 +60,9 @@ The following environment variables can be used to configure the application:
 |        |        | - **HTTP**: A direct HTTP URL to a media file.                              | `"http://example.com/video.mp4"`                                               |
 |        |        | - **File**: A local file path.                                              | `"file:///path/to/video.mp4"`                                                  |
 | logo   | string | The URL or path to the channel's logo image. This will be reference in IPTV playlist.                                | `"http://example.com/logo.png"`, `"file:///path/to/logo.png"`                  |
+| program_id | string | A unique identifier for the program. | `"12345"` |
+| groups | string array | An array of group names to which the channel belongs. | `["Kids", "Entertainment"]` |
+
 
 **Example** `config.json`
 
