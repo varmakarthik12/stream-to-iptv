@@ -1,10 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"path/filepath"
+	"stream-to-iptv/pkg/stream"
 	"stream-to-iptv/pkg/utils"
 	"strings"
+
+	"github.com/go-chi/render"
+	"github.com/grafov/m3u8"
 )
 
 func streamHandler(w http.ResponseWriter, r *http.Request) {
@@ -17,4 +22,32 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.StripPrefix("/stream", http.FileServer(http.Dir(utils.GetBaseFolder()))).ServeHTTP(w, r)
+}
+
+func playlistHandler(w http.ResponseWriter, r *http.Request) {
+	streams, err := stream.GetStreamConfig()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get stream configuration: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-mpegURL")
+
+	playlist, err := m3u8.NewMediaPlaylist(0, uint(len(streams)))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create playlist: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	for _, s := range streams {
+		streamURL := fmt.Sprintf("http://%s/stream/%s/%s", r.Host, s.Name, utils.GetStreamFileName(s.Name))
+		groupTitles := strings.Join(s.Groups, ", ")
+		entry := &m3u8.MediaSegment{
+			URI:   streamURL,
+			Title: fmt.Sprintf("#EXTINF:-1 tvg-logo=\"%s\" group-title=\"%s\",%s", s.Logo, groupTitles, s.Name),
+		}
+		playlist.AppendSegment(entry)
+	}
+
+	render.PlainText(w, r, playlist.Encode().String())
 }

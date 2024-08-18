@@ -47,7 +47,7 @@ The following environment variables can be used to configure the application:
 | Variable     | Description                                      | Default Value |
 |--------------|--------------------------------------------------|---------------|
 | `PORT`       | The port on which the server will listen.        | `8068`        |
-| `CONFIG_FILE`| The path to the configuration file. Same as `-config` flag. but as a env var             |          |
+| `CONFIG_FILE`| The path to the configuration file. Same as `g` flag. but as a env var             |          |
 
 ### `config.json` Documentation
 
@@ -101,6 +101,27 @@ services:
 ```sh
 docker-compose up -d
 ```
+
+### API Endpoints
+
+#### `GET /playlist.m3u`
+
+This API responds with an IPTV playlist. It constructs this using the `Config.json` struct, utilizing the `groups` , `logo` & other fields in the to create the IPTV playlist.
+
+Example Request:
+```
+Get http://<host>:<port>/playlist.m3u
+```
+
+Example response:
+```m3u
+#EXTM3U
+#EXTINF:-1 tvg-logo="http://example.com/logo.png" group-title="Some Group",Some TV
+http://localhost:8068/stream/Some%20TV/Some%20TV.m3u8
+#EXTINF:-1 tvg-logo="http://example.com/logo.png" group-title="Another Group",TestTv
+http://localhost:8068/stream/TestTv/TestTv.m3u8
+```
+
 
 ## Simulate a RDP Stream
 ```shell

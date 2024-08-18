@@ -9,9 +9,10 @@ import (
 )
 
 type Stream struct {
-	Name  string `json:"channel"`
-	Media string `json:"media"`
-	Logo  string `json:"logo"`
+	Name   string   `json:"channel"`
+	Media  string   `json:"media"`
+	Logo   string   `json:"logo"`
+	Groups []string `json:"groups"`
 }
 
 func GetStreamConfig() ([]Stream, error) {

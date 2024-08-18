@@ -28,8 +28,15 @@ func main() {
 
 	r.HandleFunc("/stream/*", streamHandler)
 	r.Route("/", func(c chi.Router) {
-		// TODO: implement M3U IPTV playlist
+		c.Get("/playlist.m3u", playlistHandler)
 	})
+
+	ips, err := ip.GetLocalIP()
+	if err == nil {
+		for _, ip := range ips {
+			logrus.Infof("IPTV Playlist available at http://%s:%s/playlist.m3u", ip, port)
+		}
+	}
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), r); err != nil {
 		logrus.Fatalf("Failed to start server: %v", err)

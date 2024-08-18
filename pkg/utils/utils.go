@@ -9,6 +9,7 @@ import (
 )
 
 var tmpDir string
+var configFilePath string
 
 func GetStreamPath(base, channel string) (path string) {
 	return fmt.Sprintf("%s/%s", base, channel)
@@ -49,6 +50,9 @@ func GetPort() string {
 }
 
 func GetConfigPath() string {
+	if configFilePath != "" {
+		return configFilePath
+	}
 
 	if configFile := os.Getenv("CONFIG_FILE"); configFile != "" {
 		return configFile
@@ -57,5 +61,11 @@ func GetConfigPath() string {
 	// Define a command-line flag for the config file
 	configFile := flag.String("config", "config.json", "Path to the JSON config file")
 	flag.Parse()
-	return *configFile
+	configFilePath = *configFile
+
+	if configFilePath == "" {
+		configFilePath = "config.json"
+	}
+
+	return configFilePath
 }
