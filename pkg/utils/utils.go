@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/sirupsen/logrus"
 )
@@ -68,4 +69,24 @@ func GetConfigPath() string {
 	}
 
 	return configFilePath
+}
+
+func MaxSegmentsCount() string {
+	if count := os.Getenv("MAX_SEGMENTS_COUNT"); count != "" {
+		countInt, err := strconv.Atoi(count)
+		if err != nil && countInt > 0 {
+			return count
+		}
+	}
+	return "10"
+}
+
+func MaxSegmentTime() string {
+	if time := os.Getenv("MAX_SEGMENT_TIME"); time != "" {
+		timeInt, err := strconv.Atoi(time)
+		if err != nil && timeInt > 0 {
+			return time
+		}
+	}
+	return "15"
 }

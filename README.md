@@ -48,6 +48,8 @@ The following environment variables can be used to configure the application:
 |--------------|--------------------------------------------------|---------------|
 | `PORT`       | The port on which the server will listen.        | `8068`        |
 | `CONFIG_FILE`| The path to the configuration file. Same as `g` flag. but as a env var             |          |
+| `MAX_SEGMENTS_COUNT`  | The maximum number of live segments to keep.     | `10`        |
+| `MAX_SEGMENT_TIME`  | The maximum time in each segment.         | `15`        |
 
 ### `config.json` Documentation
 

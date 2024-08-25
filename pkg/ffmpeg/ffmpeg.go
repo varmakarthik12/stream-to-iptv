@@ -16,7 +16,7 @@ func StartFFmpeg(stream stream.Stream) error {
 
 	ffmpegCmd.Args = append(ffmpegCmd.Args, "-map", fmt.Sprintf("0:p:%s", stream.ProgramId))
 	ffmpegCmd.Args = append(ffmpegCmd.Args, "-c:v", "copy", "-c:a", "copy",
-		"-hls_time", "10", "-hls_list_size", "5", "-hls_flags", "delete_segments",
+		"-hls_time", utils.MaxSegmentTime(), "-hls_list_size", utils.MaxSegmentsCount(), "-hls_flags", "delete_segments",
 		"-hls_segment_filename", filepath.Join(utils.GetStreamPath(utils.GetBaseFolder(), stream.Name), `segment_%03d.ts`),
 		filepath.Join(utils.GetStreamPath(utils.GetBaseFolder(), stream.Name), utils.GetStreamFileName(stream.Name)))
 
