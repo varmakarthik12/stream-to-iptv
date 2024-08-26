@@ -90,3 +90,10 @@ func MaxSegmentTime() string {
 	}
 	return "15"
 }
+
+func GetEPGURL() string {
+	if epgURL := os.Getenv("EPG_URL"); epgURL != "" {
+		return epgURL
+	}
+	return "https://avkb.short.gy/epg.xml.gz"
+}

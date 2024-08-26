@@ -50,6 +50,8 @@ The following environment variables can be used to configure the application:
 | `CONFIG_FILE`| The path to the configuration file. Same as `g` flag. but as a env var             |          |
 | `MAX_SEGMENTS_COUNT`  | The maximum number of live segments to keep.     | `10`        |
 | `MAX_SEGMENT_TIME`  | The maximum time in each segment.         | `15`        |
+| `EPG_URL`           | The URL for the Electronic Program Guide (EPG).  |https://avkb.short.gy/epg.xml.gz |
+
 
 ### `config.json` Documentation
 
@@ -64,6 +66,8 @@ The following environment variables can be used to configure the application:
 | logo   | string | The URL or path to the channel's logo image. This will be reference in IPTV playlist.                                | `"http://example.com/logo.png"`, `"file:///path/to/logo.png"`                  |
 | program_id | string | A unique identifier for the program. | `"12345"` |
 | groups | string array | An array of group names to which the channel belongs. | `["Kids", "Entertainment"]` |
+| tvg_id    | string       | The TV Guide ID for the channel. (Dependent on `EPG_URL` ENV var) | `"my_channel_tvg_id"`|
+
 
 
 **Example** `config.json`

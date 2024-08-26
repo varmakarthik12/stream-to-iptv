@@ -44,10 +44,13 @@ func playlistHandler(w http.ResponseWriter, r *http.Request) {
 		groupTitles := strings.Join(s.Groups, ", ")
 		entry := &m3u8.MediaSegment{
 			URI:   streamURL,
-			Title: fmt.Sprintf("#EXTINF:-1 tvg-logo=\"%s\" group-title=\"%s\",%s", s.Logo, groupTitles, s.Name),
+			Title: fmt.Sprintf("#EXTINF:-1 tvg-id=\"%s\" tvg-logo=\"%s\" group-title=\"%s\",%s", s.TVGId, s.Logo, groupTitles, s.Name),
 		}
 		playlist.AppendSegment(entry)
 	}
 
-	render.PlainText(w, r, playlist.Encode().String())
+	// Manually construct the M3U8 content with the x-tvg-url attribute
+	playlistContent := strings.Replace(playlist.Encode().String(), "#EXTM3U\n", "", 1)
+	m3u8Content := fmt.Sprintf("#EXTM3U x-tvg-url=\"%s\"\n%s", utils.GetEPGURL(), playlistContent)
+	render.PlainText(w, r, m3u8Content)
 }

@@ -14,6 +14,7 @@ type Stream struct {
 	Logo      string   `json:"logo"`
 	Groups    []string `json:"groups"`
 	ProgramId string   `json:"program_id"`
+	TVGId     string   `json:"tvg_id"`
 }
 
 func GetStreamConfig() ([]Stream, error) {
