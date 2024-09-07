@@ -97,3 +97,10 @@ func GetEPGURL() string {
 	}
 	return "https://avkb.short.gy/epg.xml.gz"
 }
+
+func GetIpAddr() string {
+	if ipAddr := os.Getenv("IP_ADDR"); ipAddr != "" {
+		return ipAddr
+	}
+	return ""
+}

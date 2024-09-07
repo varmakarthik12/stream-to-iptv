@@ -51,6 +51,7 @@ The following environment variables can be used to configure the application:
 | `MAX_SEGMENTS_COUNT`  | The maximum number of live segments to keep.     | `10`        |
 | `MAX_SEGMENT_TIME`  | The maximum time in each segment.         | `15`        |
 | `EPG_URL`           | The URL for the Electronic Program Guide (EPG).  |https://avkb.short.gy/epg.xml.gz |
+| `IP_ADDR`           | Ip address of the network interface broadcasting the network stream. Same as `ffmpeg -i XXXXX?localaddr=<IP_ADDR>`  | |
 
 
 ### `config.json` Documentation

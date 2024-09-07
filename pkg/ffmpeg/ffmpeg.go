@@ -10,9 +10,18 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type FFmpegConfig struct {
+	LocalAddr string
+}
+
 // startFFmpeg starts an FFmpeg process for a given stream
-func StartFFmpeg(stream stream.Stream) error {
-	ffmpegCmd := exec.Command("ffmpeg", "-i", stream.Media)
+func StartFFmpeg(stream stream.Stream, config FFmpegConfig) error {
+	input := stream.Media
+	if config.LocalAddr != "" {
+		input = fmt.Sprintf("%s?localaddr=%s", stream.Media, config.LocalAddr)
+	}
+
+	ffmpegCmd := exec.Command("ffmpeg", "-i", input)
 
 	ffmpegCmd.Args = append(ffmpegCmd.Args, "-map", fmt.Sprintf("0:p:%s", stream.ProgramId))
 	ffmpegCmd.Args = append(ffmpegCmd.Args, "-c:v", "copy", "-c:a", "copy",

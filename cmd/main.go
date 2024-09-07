@@ -59,7 +59,10 @@ func initStream(port string) error {
 		logrus.Infof("Starting stream for %s with Media source %s", stream.Name, stream.Media)
 
 		os.MkdirAll(fmt.Sprintf("%s/%s", utils.GetBaseFolder(), stream.Name), os.ModePerm)
-		err := ffmpeg.StartFFmpeg(stream)
+		streamConfig := ffmpeg.FFmpegConfig{
+			LocalAddr: utils.GetIpAddr(),
+		}
+		err := ffmpeg.StartFFmpeg(stream, streamConfig)
 		if err != nil {
 			return fmt.Errorf("failed to start FFmpeg for stream %s: %v", stream.Name, err)
 		}
