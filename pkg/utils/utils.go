@@ -88,7 +88,14 @@ func MaxSegmentTime() string {
 			return time
 		}
 	}
-	return "15"
+	return "10"
+}
+
+func GetBufferSize() string {
+	if bufferSize := os.Getenv("BUFFER_SIZE"); bufferSize != "" {
+		return bufferSize
+	}
+	return "1000000"
 }
 
 func GetEPGURL() string {

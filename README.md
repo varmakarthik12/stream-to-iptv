@@ -49,9 +49,10 @@ The following environment variables can be used to configure the application:
 | `PORT`       | The port on which the server will listen.        | `8068`        |
 | `CONFIG_FILE`| The path to the configuration file. Same as `g` flag. but as a env var             |          |
 | `MAX_SEGMENTS_COUNT`  | The maximum number of live segments to keep.     | `10`        |
-| `MAX_SEGMENT_TIME`  | The maximum time in each segment.         | `15`        |
+| `MAX_SEGMENT_TIME`  | The maximum time in each segment.         | `10`        |
 | `EPG_URL`           | The URL for the Electronic Program Guide (EPG).  |https://avkb.short.gy/epg.xml.gz |
 | `IP_ADDR`           | Ip address of the network interface broadcasting the network stream. Same as `ffmpeg -i XXXXX?localaddr=<IP_ADDR>`  | |
+| `BUFFER_SIZE` | Customizable buffer size for unstable network streams. Increase this on jitters | `1000000`|
 
 
 ### `config.json` Documentation

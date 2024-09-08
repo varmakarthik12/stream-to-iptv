@@ -22,7 +22,8 @@ func StartFFmpeg(stream stream.Stream, config FFmpegConfig) error {
 	}
 
 	ffmpegCmd := exec.Command("ffmpeg", "-i", input)
-
+	ffmpegCmd.Args = append(ffmpegCmd.Args, "-fflags", "+genpts")
+	ffmpegCmd.Args = append(ffmpegCmd.Args, "-buffer_size", utils.GetBufferSize())
 	ffmpegCmd.Args = append(ffmpegCmd.Args, "-map", fmt.Sprintf("0:p:%s", stream.ProgramId))
 	ffmpegCmd.Args = append(ffmpegCmd.Args, "-c:v", "copy", "-c:a", "copy",
 		"-hls_time", utils.MaxSegmentTime(), "-hls_list_size", utils.MaxSegmentsCount(), "-hls_flags", "delete_segments",
