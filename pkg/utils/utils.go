@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -110,4 +111,13 @@ func GetIpAddr() string {
 		return ipAddr
 	}
 	return ""
+}
+
+func GetUseGPU() bool {
+	if useGPU := os.Getenv("USE_GPU"); useGPU != "" {
+		if strings.ToLower(useGPU) == "true" {
+			return true
+		}
+	}
+	return false
 }

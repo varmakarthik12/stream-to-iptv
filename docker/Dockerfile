@@ -19,10 +19,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o stre
 
 # Actual exposed image
 # Start a new stage from scratch
-FROM alpine:latest
+FROM ubuntu:latest
 
-# Install FFmpeg
-RUN apk --no-cache add ffmpeg
+# Install FFmpeg with CUDA support
+RUN apt-get update && \
+    apt-get install -y ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy the Pre-built binary file from the previous stage
 COPY --from=builder /app/stream /usr/local/bin/stream

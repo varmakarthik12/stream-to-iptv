@@ -53,6 +53,7 @@ The following environment variables can be used to configure the application:
 | `EPG_URL`           | The URL for the Electronic Program Guide (EPG).  |https://avkb.short.gy/epg.xml.gz |
 | `IP_ADDR`           | Ip address of the network interface broadcasting the network stream. Same as `ffmpeg -i XXXXX?localaddr=<IP_ADDR>`  | |
 | `BUFFER_SIZE` | Customizable buffer size for unstable network streams. Increase this on jitters | `1000000`|
+| `USE_GPU` | Use Nvidia CUDA GPU for hardware acceleration | `false`|
 
 
 ### `config.json` Documentation
