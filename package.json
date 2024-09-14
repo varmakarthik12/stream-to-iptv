@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "nodemon -e go --signal SIGTERM --exec yarn dev:run",
     "dev:run": "go run ./cmd/*.go",
-    "build:docker": "docker build -t varmakarthik12/stream-to-iptv:beta11 -f ./docker/Dockerfile .",
+    "build:docker": "docker build -t varmakarthik12/stream-to-iptv -f ./docker/Dockerfile .",
     "build": "./build.sh"
   }
 }
