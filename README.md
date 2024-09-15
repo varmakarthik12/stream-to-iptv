@@ -54,6 +54,8 @@ The following environment variables can be used to configure the application:
 | `IP_ADDR`           | Ip address of the network interface broadcasting the network stream. Same as `ffmpeg -i XXXXX?localaddr=<IP_ADDR>`  | |
 | `BUFFER_SIZE` | Customizable buffer size for unstable network streams. Increase this on jitters | `1000000`|
 | `USE_GPU` | Use Nvidia CUDA GPU for hardware acceleration | `false`|
+| `MAX_RETRIES` | Maximum number of retries for a stream | `5` |
+| `RETRY_CLEAN_INTERVAL` |  Specifies the interval for cleaning up retries, in minutes. | `5` |
 
 
 ### `config.json` Documentation

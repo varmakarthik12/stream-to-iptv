@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -120,4 +121,25 @@ func GetUseGPU() bool {
 		}
 	}
 	return false
+}
+
+func GetMaxRetries() int {
+	if maxRetries := os.Getenv("MAX_RETRIES"); maxRetries != "" {
+		maxRetriesInt, err := strconv.Atoi(maxRetries)
+		if err != nil && maxRetriesInt > 0 {
+			return maxRetriesInt
+		}
+	}
+	return 5
+}
+
+func GetRetryCleanInterval() time.Duration {
+	// This is in minutes
+	if retryCleanInterval := os.Getenv("RETRY_CLEAN_INTERVAL"); retryCleanInterval != "" {
+		retryCleanIntervalInt, err := strconv.Atoi(retryCleanInterval)
+		if err != nil && retryCleanIntervalInt > 0 {
+			return time.Duration(retryCleanIntervalInt) * time.Minute
+		}
+	}
+	return 5 * time.Minute
 }

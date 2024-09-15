@@ -62,10 +62,15 @@ func initStream(port string) error {
 		streamConfig := ffmpeg.FFmpegConfig{
 			LocalAddr: utils.GetIpAddr(),
 		}
-		err := ffmpeg.StartFFmpeg(stream, streamConfig)
-		if err != nil {
-			return fmt.Errorf("failed to start FFmpeg for stream %s: %v", stream.Name, err)
+
+		asyncStream := func() {
+			err := ffmpeg.StartFFmpeg(stream, streamConfig)
+			if err != nil {
+				logrus.Errorf("failed to start FFmpeg for stream %s: %v", stream.Name, err)
+			}
 		}
+
+		go asyncStream()
 
 		for _, ip := range ips {
 			logrus.Infof("Stream %s available at http://%s:%s/stream/%s/%s", stream.Name, ip, port, stream.Name, utils.GetStreamFileName(stream.Name))
