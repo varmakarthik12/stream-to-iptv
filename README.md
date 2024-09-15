@@ -56,6 +56,7 @@ The following environment variables can be used to configure the application:
 | `USE_GPU` | Use Nvidia CUDA GPU for hardware acceleration | `false`|
 | `MAX_RETRIES` | Maximum number of retries for a stream | `5` |
 | `RETRY_CLEAN_INTERVAL` |  Specifies the interval for cleaning up retries, in minutes. | `5` |
+| `RETRY_WAIT_TIME` | Specifies time in seconds to wait before retrying a stream | `30` |
 
 
 ### `config.json` Documentation

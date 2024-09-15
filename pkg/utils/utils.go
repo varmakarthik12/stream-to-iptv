@@ -143,3 +143,14 @@ func GetRetryCleanInterval() time.Duration {
 	}
 	return 5 * time.Minute
 }
+
+func GetRetryWaitTime() time.Duration {
+	// This is in seconds
+	if retryWaitTime := os.Getenv("RETRY_WAIT_TIME"); retryWaitTime != "" {
+		retryWaitTimeInt, err := strconv.Atoi(retryWaitTime)
+		if err != nil && retryWaitTimeInt > 0 {
+			return time.Duration(retryWaitTimeInt) * time.Second
+		}
+	}
+	return 30 * time.Second
+}

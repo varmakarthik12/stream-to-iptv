@@ -60,14 +60,15 @@ func StartFFmpeg(stream stream.Stream, config FFmpegConfig) error {
 	} else {
 		if time.Since(currentRetry.LastRetry) > utils.GetRetryCleanInterval() {
 			retryMem[stream.Name] = Retry{RetryCount: 1, LastRetry: time.Now()}
-		} else if currentRetry.RetryCount >= utils.GetMaxRetries() {
+		} else if currentRetry.RetryCount > utils.GetMaxRetries() {
 			logrus.Errorf("Max retries reached for stream %s. Exiting...", stream.Name)
 			return nil
 		} else {
 			retryMem[stream.Name] = Retry{RetryCount: currentRetry.RetryCount + 1, LastRetry: time.Now()}
 		}
 	}
-
+	logrus.Infof("Waiting for %s before retrying stream %s", utils.GetRetryWaitTime(), stream.Name)
+	time.Sleep(utils.GetRetryWaitTime())
 	logrus.Infof("Retrying stream %s, Retries %d", stream.Name, retryMem[stream.Name].RetryCount)
 	StartFFmpeg(stream, config)
 
