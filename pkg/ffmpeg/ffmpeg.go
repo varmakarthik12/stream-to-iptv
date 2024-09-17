@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"stream-to-iptv/pkg/stream"
 	"stream-to-iptv/pkg/utils"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -25,8 +26,21 @@ var retryMem = make(map[string]Retry)
 // startFFmpeg starts an FFmpeg process for a given stream
 func StartFFmpeg(stream stream.Stream, config FFmpegConfig) error {
 	input := stream.Media
+	inputParams := []string{}
 	if config.LocalAddr != "" {
-		input = fmt.Sprintf("%s?localaddr=%s", stream.Media, config.LocalAddr)
+		inputParams = append(inputParams, fmt.Sprintf("localaddr=%s", stream.Media, config.LocalAddr))
+	}
+
+	if utils.GetFifoSize() != "" {
+		inputParams = append(inputParams, fmt.Sprintf("fifo_size=%s", utils.GetFifoSize()))
+	}
+
+	if utils.GetOverrunNonFatal() {
+		inputParams = append(inputParams, "overrun_nonfatal=1")
+	}
+
+	if len(inputParams) > 0 {
+		input = fmt.Sprintf("%s?%s", stream.Media, strings.Join(inputParams, "&"))
 	}
 
 	ffmpegCmd := exec.Command("ffmpeg")
@@ -36,7 +50,6 @@ func StartFFmpeg(stream stream.Stream, config FFmpegConfig) error {
 	}
 	ffmpegCmd.Args = append(ffmpegCmd.Args, "-hide_banner", "-loglevel", "error")
 	ffmpegCmd.Args = append(ffmpegCmd.Args, "-i", input)
-	// ffmpegCmd.Args = append(ffmpegCmd.Args, "-fflags", "+genpts")
 	ffmpegCmd.Args = append(ffmpegCmd.Args, "-buffer_size", utils.GetBufferSize())
 	ffmpegCmd.Args = append(ffmpegCmd.Args, "-map", fmt.Sprintf("0:p:%s", stream.ProgramId))
 	ffmpegCmd.Args = append(ffmpegCmd.Args, "-c", "copy")

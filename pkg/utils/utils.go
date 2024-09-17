@@ -154,3 +154,17 @@ func GetRetryWaitTime() time.Duration {
 	}
 	return 30 * time.Second
 }
+
+func GetFifoSize() string {
+	if fifoSize := os.Getenv("FIFO_SIZE"); fifoSize != "" {
+		return fifoSize
+	}
+	return ""
+}
+
+func GetOverrunNonFatal() bool {
+	if overrunNonFatal := os.Getenv("OVERRUN_NONFATAL"); overrunNonFatal != "" {
+		return strings.ToLower(overrunNonFatal) == "true"
+	}
+	return false
+}

@@ -57,7 +57,8 @@ The following environment variables can be used to configure the application:
 | `MAX_RETRIES` | Maximum number of retries for a stream | `5` |
 | `RETRY_CLEAN_INTERVAL` |  Specifies the interval for cleaning up retries, in minutes. | `5` |
 | `RETRY_WAIT_TIME` | Specifies time in seconds to wait before retrying a stream | `30` |
-
+| `FIFO_SIZE` | specifies the size of the FIFO buffer for handling UDP input streams. | |
+| `OVERRUN_NONFATAL` |  Specifies whether buffer overruns should be treated as non-fatal errors.    | `false`       |
 
 ### `config.json` Documentation
 
