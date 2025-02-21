@@ -126,7 +126,11 @@ func GetUseGPU() bool {
 func GetMaxRetries() int {
 	if maxRetries := os.Getenv("MAX_RETRIES"); maxRetries != "" {
 		maxRetriesInt, err := strconv.Atoi(maxRetries)
-		if err != nil && maxRetriesInt > 0 {
+		if err != nil {
+			logrus.Errorf("Failed to parse MAX_RETRIES: %v", err)
+			return 5
+		}
+		if maxRetriesInt > 0 {
 			return maxRetriesInt
 		}
 	}

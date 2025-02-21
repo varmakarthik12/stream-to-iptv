@@ -28,7 +28,7 @@ func StartFFmpeg(stream stream.Stream, config FFmpegConfig) error {
 	input := stream.Media
 	inputParams := []string{}
 	if config.LocalAddr != "" {
-		inputParams = append(inputParams, fmt.Sprintf("localaddr=%s", stream.Media, config.LocalAddr))
+		inputParams = append(inputParams, fmt.Sprintf("localaddr=%s", config.LocalAddr))
 	}
 
 	if utils.GetFifoSize() != "" {
@@ -73,7 +73,7 @@ func StartFFmpeg(stream stream.Stream, config FFmpegConfig) error {
 	} else {
 		if time.Since(currentRetry.LastRetry) > utils.GetRetryCleanInterval() {
 			retryMem[stream.Name] = Retry{RetryCount: 1, LastRetry: time.Now()}
-		} else if currentRetry.RetryCount > utils.GetMaxRetries() {
+		} else if utils.GetMaxRetries() != 0 && currentRetry.RetryCount > utils.GetMaxRetries() {
 			logrus.Errorf("Max retries reached for stream %s. Exiting...", stream.Name)
 			return nil
 		} else {
