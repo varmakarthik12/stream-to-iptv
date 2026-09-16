@@ -276,7 +276,9 @@ func (m *Manager) GetStreamLogs(slug string) []models.StreamLogEntry {
 	return nil
 }
 
-// Touch is called whenever an IPTV player requests a playlist or TS segment
+// Touch is called whenever an IPTV player requests a playlist or TS segment.
+// It atomically claims the "starting" status and sets ColdStarting before spawning
+// the FFmpeg goroutine, ensuring no two goroutines ever start for the same stream.
 func (m *Manager) Touch(slug string) {
 	m.mu.RLock()
 	state, exists := m.processes[slug]
@@ -306,19 +308,34 @@ func (m *Manager) Touch(slug string) {
 		state.mu.Unlock()
 		return
 	}
+	// Claim the starting slot atomically. Setting ColdStarting=true here means
+	// IsStreamReady will correctly open a discontinuity window even if StartStream
+	// bails out because another goroutine already set status="starting".
 	state.Status = "starting"
+	state.ColdStarting = true
+	state.TransitionUntil = time.Time{}
 	state.mu.Unlock()
 
 	go m.StartStream(stream)
 }
 
+// StartStream initializes and launches FFmpeg for the given stream.
+// It guards against duplicate launches from any call site (Touch, checkAutoRecover, or direct).
 func (m *Manager) StartStream(stream *models.Stream) error {
 	state := m.getOrCreateState(stream)
 
 	state.mu.Lock()
-	if state.Status == "running" {
-		state.mu.Unlock()
-		return nil
+	// Guard: only one goroutine may start FFmpeg at a time.
+	// "starting" is set by Touch() before this goroutine runs, or by checkAutoRecover().
+	// Either way, a second concurrent caller must bail out.
+	if state.Status == "running" || state.Status == "starting" {
+		// If this was a direct call (not via Touch), we still need to launch FFmpeg.
+		// Detect: if CancelFunc is nil, no FFmpeg goroutine is actually running yet.
+		if state.CancelFunc != nil {
+			state.mu.Unlock()
+			return nil
+		}
+		// No cancel func means no goroutine is running — fall through to start one.
 	}
 	state.Status = "starting"
 	state.StartedAt = time.Now()
@@ -600,8 +617,10 @@ func buildFFmpegArgs(stream *models.Stream, streamDir string) []string {
 	// Codec copy & timestamp generation/corruption handling
 	args = append(args, "-c", "copy", "-fflags", "+genpts+discardcorrupt")
 
-	// Fast 3-second HLS segmenting for rapid cold-start and low-latency live playback
-	args = append(args, "-hls_time", "3", "-hls_list_size", "10", "-hls_flags", "delete_segments")
+	// Fast 3-second HLS segmenting for rapid cold-start and low-latency live playback.
+	// temp_file: FFmpeg writes to a temp file then atomically renames to the final .m3u8,
+	// preventing IsStreamReady from reading a partially-written playlist.
+	args = append(args, "-hls_time", "3", "-hls_list_size", "10", "-hls_flags", "delete_segments+temp_file")
 
 	segmentPattern := filepath.Join(streamDir, "segment_%03d.ts")
 	playlistPath := filepath.Join(streamDir, stream.Slug+".m3u8")
@@ -798,8 +817,8 @@ func Slugify(name string) string {
 	return slug
 }
 
-// IsStreamReady checks whether FFmpeg has written a valid playlist and at least one playable TS segment.
-// It also tracks transition state from cold-start loading bumper to live stream.
+// IsStreamReady checks whether FFmpeg has written a valid playlist with actual segments
+// and at least one playable TS segment on disk. Both must be true before serving live content.
 func (m *Manager) IsStreamReady(slug string) (ready bool, shouldInjectDiscontinuity bool) {
 	m.mu.RLock()
 	state, exists := m.processes[slug]
@@ -809,18 +828,17 @@ func (m *Manager) IsStreamReady(slug string) (ready bool, shouldInjectDiscontinu
 		return false, false
 	}
 
-	state.mu.Lock()
-	defer state.mu.Unlock()
-
 	streamDir := filepath.Join(db.GetStreamsDir(), slug)
 	playlistPath := filepath.Join(streamDir, slug+".m3u8")
 
-	info, err := os.Stat(playlistPath)
-	if err != nil || info.Size() == 0 {
+	// Read the manifest and verify it has at least one #EXTINF entry.
+	// A non-zero file that only contains the header is not yet playable.
+	data, err := os.ReadFile(playlistPath)
+	if err != nil || !strings.Contains(string(data), "#EXTINF") {
 		return false, false
 	}
 
-	// Verify that at least one .ts media segment exists and has size > 0
+	// Verify that at least one real (non-loading) TS segment exists on disk with size > 0.
 	entries, err := os.ReadDir(streamDir)
 	if err != nil {
 		return false, false
@@ -841,9 +859,16 @@ func (m *Manager) IsStreamReady(slug string) (ready bool, shouldInjectDiscontinu
 		return false, false
 	}
 
+	// Both playlist and segments exist on disk — stream is live.
+	// Manage the cold-start → live discontinuity transition window.
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
 	now := time.Now()
 	if state.ColdStarting {
-		// Live media segments are ready! Start a 10-second transition window
+		// Very first time real segments are detected after this cold-start.
+		// Open a 10-second window during which we inject #EXT-X-DISCONTINUITY
+		// so players switch seamlessly from the loading bumper to the live stream.
 		state.ColdStarting = false
 		state.TransitionUntil = now.Add(10 * time.Second)
 	}
@@ -853,6 +878,7 @@ func (m *Manager) IsStreamReady(slug string) (ready bool, shouldInjectDiscontinu
 }
 
 // WaitForStreamReady polls until the stream has written its playlist and at least one segment, or until timeout.
+// Uses a tight poll interval to detect stream readiness as fast as possible for seamless cold-start transitions.
 func (m *Manager) WaitForStreamReady(slug string, timeout time.Duration) (ready bool, shouldDiscontinuity bool) {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -863,7 +889,7 @@ func (m *Manager) WaitForStreamReady(slug string, timeout time.Duration) (ready 
 		if time.Now().After(deadline) {
 			return false, false
 		}
-		time.Sleep(150 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

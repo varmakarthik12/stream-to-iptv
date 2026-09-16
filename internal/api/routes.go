@@ -147,8 +147,11 @@ func RegisterRoutes(
 			w.Header().Set("Pragma", "no-cache")
 			w.Header().Set("Expires", "0")
 
-			// Wait briefly (up to 3 seconds) for stream to become ready during cold-start
-			ready, shouldDiscontinuity := streamMgr.WaitForStreamReady(slug, 3*time.Second)
+			// Wait up to 8 seconds for the stream to become ready during cold-start.
+			// On fast sources FFmpeg produces the first segment well within this window,
+			// giving a fully seamless transition. On slower sources the player falls back
+			// to the loading bumper and re-polls every 2s until FFmpeg catches up.
+			ready, shouldDiscontinuity := streamMgr.WaitForStreamReady(slug, 8*time.Second)
 			if !ready {
 				// FFmpeg is still cold-starting: serve dynamic loading bumper playlist with sliding buffer
 				w.WriteHeader(http.StatusOK)
