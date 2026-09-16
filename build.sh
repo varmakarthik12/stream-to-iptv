@@ -1,25 +1,33 @@
 #!/bin/bash
+set -e
+
+echo "Building React Web UI bundle..."
+npm --prefix web install
+npm --prefix web run build
 
 # Define target operating systems and architectures
 OS=("linux" "darwin" "windows")
 ARCH=("amd64" "arm64")
 
-# Remove the build directory if it exists
+# Remove and recreate build directory
 rm -rf build
-
-# Create build directory if it doesn't exist
 mkdir -p build
 
 # Loop through each OS and architecture combination
 for os in "${OS[@]}"; do
   for arch in "${ARCH[@]}"; do
+    # Skip Windows ARM64 if not needed
+    if [ "$os" == "windows" ] && [ "$arch" == "arm64" ]; then
+      continue
+    fi
+
     output="build/stream-${os}-${arch}"
     if [ "$os" == "windows" ]; then
       output+=".exe"
     fi
     echo "Building for $os/$arch..."
-    GOOS=$os GOARCH=$arch go build -o $output cmd/*.go
+    CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -ldflags="-w -s" -o "$output" ./cmd
   done
 done
 
-echo "Build complete. Artifacts are in the build directory."
+echo "Build complete. Multi-platform artifacts with embedded UI are in the build directory."

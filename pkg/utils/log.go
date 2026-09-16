@@ -13,11 +13,11 @@ func LogStream(reader io.ReadCloser, logLevel string) {
 	for scanner.Scan() {
 		switch logLevel {
 		case "INFO":
-			logrus.Infof(scanner.Text())
+			logrus.Info(scanner.Text())
 		case "ERROR":
-			logrus.Errorf(scanner.Text())
+			logrus.Error(scanner.Text())
 		default:
-			logrus.Infof(scanner.Text())
+			logrus.Info(scanner.Text())
 		}
 	}
 	if err := scanner.Err(); err != nil {

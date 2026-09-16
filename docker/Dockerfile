@@ -1,40 +1,50 @@
-# Use the official Golang image to create a build artifact.
-FROM golang:1.22 AS builder
+# ==========================================
+# Stage 1: Build React Frontend
+# ==========================================
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/web
+COPY web/package*.json ./
+RUN npm install
+COPY web/ ./
+RUN npm run build
 
-# Set the Current Working Directory inside the container
+# ==========================================
+# Stage 2: Build Go Application with Embedded UI
+# ==========================================
+FROM golang:1.24-alpine AS go-builder
 WORKDIR /app
-
-# Copy go mod and sum files
 COPY go.mod go.sum ./
-
-# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
 RUN go mod download
-
-# Copy the source from the current directory to the Working Directory inside the container
 COPY . .
+# Copy production frontend build assets into embedded path
+COPY --from=frontend-builder /app/web/dist ./web/dist
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o stream ./cmd
 
-# Build the Go app as a statically linked binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o stream cmd/*.go
+# ==========================================
+# Stage 3: Production Runtime with FFmpeg
+# ==========================================
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
 
-
-# Actual exposed image
-# Start a new stage from scratch
-FROM ubuntu:latest
-
-# Install FFmpeg with CUDA support
 RUN apt-get update && \
-    apt-get install -y ffmpeg && \
+    apt-get install -y --no-install-recommends \
+    ffmpeg \
+    ca-certificates \
+    tzdata && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy the Pre-built binary file from the previous stage
-COPY --from=builder /app/stream /usr/local/bin/stream
+WORKDIR /app
 
-# Copy the config file
-COPY config.json /app/config.json
+# Copy statically compiled stream binary
+COPY --from=go-builder /app/stream /usr/local/bin/stream
 
-# Expose port 8068 to the outside world
+# Setup unified storage root
+ENV DATA_DIR=/app/data
+RUN mkdir -p /app/data
+VOLUME ["/app/data"]
+
 EXPOSE 8068
 
-# Command to run the executable
-CMD ["stream", "--config", "/app/config.json"]
+ENTRYPOINT ["/usr/local/bin/stream"]
+CMD ["--data-dir", "/app/data"]

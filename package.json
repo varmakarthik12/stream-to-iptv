@@ -1,17 +1,16 @@
 {
   "name": "stream-to-iptv",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "index.js",
   "repository": "https://github.com/varmakarthik12/stream-to-iptv.git",
   "author": "Karthik",
   "license": "MIT",
-  "devDependencies": {
-    "nodemon": "^3.1.4"
-  },
   "scripts": {
-    "dev": "nodemon -e go --signal SIGTERM --exec yarn dev:run",
-    "dev:run": "go run ./cmd/*.go",
+    "dev:ui": "npm --prefix web run dev",
+    "dev:server": "go run ./cmd",
+    "build:ui": "npm --prefix web run build",
+    "build": "npm --prefix web run build && go build -o stream ./cmd",
     "build:docker": "docker build -t varmakarthik12/stream-to-iptv -f ./docker/Dockerfile .",
-    "build": "./build.sh"
+    "test": "go test ./..."
   }
 }

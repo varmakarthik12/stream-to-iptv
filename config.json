@@ -1,7 +1,0 @@
-[
-  {
-    "channel": "TestTv",
-    "media": "udp://@239.255.255.250:1234",
-    "logo": "http://example.com/logo.png"
-  }
-]
