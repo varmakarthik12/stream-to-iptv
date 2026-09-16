@@ -27,14 +27,15 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
-          cache-dependency-path: 'web/package.json'
+          cache-dependency-path: 'web/package-lock.json'
 
       - name: Install Frontend Dependencies & Build UI
         run: |
-          npm --prefix web install
+          npm --prefix web ci
           npm --prefix web run build
+          git checkout -- web/package-lock.json 2>/dev/null || true
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

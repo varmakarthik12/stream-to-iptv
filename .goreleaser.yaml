@@ -6,7 +6,7 @@ project_name: stream-to-iptv
 before:
   hooks:
     - go mod tidy
-    - npm --prefix web install
+    - npm --prefix web ci
     - npm --prefix web run build
 
 builds:
