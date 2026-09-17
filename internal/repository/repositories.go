@@ -353,7 +353,7 @@ func (r *Repository) SearchEPGChannels(sourceID, query string, limit int) ([]mod
 // Stream Operations
 func (r *Repository) GetAllStreams() ([]models.Stream, error) {
 	rows, err := r.db.Query(`SELECT id, name, slug, tvg_id, tvg_name, tvg_chno, media_url, logo_id, logo_url,
-		program_id, mode, idle_timeout_sec, buffer_size, fifo_size, use_gpu, overrun_nonfatal, enabled,
+		program_id, COALESCE(local_addr, ''), mode, idle_timeout_sec, buffer_size, fifo_size, use_gpu, overrun_nonfatal, enabled,
 		COALESCE(auto_recover, 1), COALESCE(recover_timeout_sec, 30), created_at, updated_at
 		FROM streams ORDER BY 
 			CASE WHEN tvg_chno IS NOT NULL AND tvg_chno != '' AND CAST(tvg_chno AS INTEGER) > 0 
@@ -370,7 +370,7 @@ func (r *Repository) GetAllStreams() ([]models.Stream, error) {
 		var s models.Stream
 		var useGPUInt, overrunInt, enabledInt, autoRecoverInt int
 		if err := rows.Scan(&s.ID, &s.Name, &s.Slug, &s.TVGId, &s.TVGName, &s.TVGChno, &s.MediaURL, &s.LogoID, &s.LogoURL,
-			&s.ProgramID, &s.Mode, &s.IdleTimeoutSec, &s.BufferSize, &s.FifoSize, &useGPUInt, &overrunInt, &enabledInt,
+			&s.ProgramID, &s.LocalAddr, &s.Mode, &s.IdleTimeoutSec, &s.BufferSize, &s.FifoSize, &useGPUInt, &overrunInt, &enabledInt,
 			&autoRecoverInt, &s.RecoverTimeoutSec, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -410,11 +410,11 @@ func (r *Repository) GetStreamByID(id string) (*models.Stream, error) {
 	var s models.Stream
 	var useGPUInt, overrunInt, enabledInt, autoRecoverInt int
 	err := r.db.QueryRow(`SELECT id, name, slug, tvg_id, tvg_name, tvg_chno, media_url, logo_id, logo_url,
-		program_id, mode, idle_timeout_sec, buffer_size, fifo_size, use_gpu, overrun_nonfatal, enabled,
+		program_id, COALESCE(local_addr, ''), mode, idle_timeout_sec, buffer_size, fifo_size, use_gpu, overrun_nonfatal, enabled,
 		COALESCE(auto_recover, 1), COALESCE(recover_timeout_sec, 30), created_at, updated_at
 		FROM streams WHERE id = ?`, id).
 		Scan(&s.ID, &s.Name, &s.Slug, &s.TVGId, &s.TVGName, &s.TVGChno, &s.MediaURL, &s.LogoID, &s.LogoURL,
-			&s.ProgramID, &s.Mode, &s.IdleTimeoutSec, &s.BufferSize, &s.FifoSize, &useGPUInt, &overrunInt, &enabledInt,
+			&s.ProgramID, &s.LocalAddr, &s.Mode, &s.IdleTimeoutSec, &s.BufferSize, &s.FifoSize, &useGPUInt, &overrunInt, &enabledInt,
 			&autoRecoverInt, &s.RecoverTimeoutSec, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -446,11 +446,11 @@ func (r *Repository) GetStreamBySlug(slug string) (*models.Stream, error) {
 	var s models.Stream
 	var useGPUInt, overrunInt, enabledInt, autoRecoverInt int
 	err := r.db.QueryRow(`SELECT id, name, slug, tvg_id, tvg_name, tvg_chno, media_url, logo_id, logo_url,
-		program_id, mode, idle_timeout_sec, buffer_size, fifo_size, use_gpu, overrun_nonfatal, enabled,
+		program_id, COALESCE(local_addr, ''), mode, idle_timeout_sec, buffer_size, fifo_size, use_gpu, overrun_nonfatal, enabled,
 		COALESCE(auto_recover, 1), COALESCE(recover_timeout_sec, 30), created_at, updated_at
 		FROM streams WHERE slug = ?`, slug).
 		Scan(&s.ID, &s.Name, &s.Slug, &s.TVGId, &s.TVGName, &s.TVGChno, &s.MediaURL, &s.LogoID, &s.LogoURL,
-			&s.ProgramID, &s.Mode, &s.IdleTimeoutSec, &s.BufferSize, &s.FifoSize, &useGPUInt, &overrunInt, &enabledInt,
+			&s.ProgramID, &s.LocalAddr, &s.Mode, &s.IdleTimeoutSec, &s.BufferSize, &s.FifoSize, &useGPUInt, &overrunInt, &enabledInt,
 			&autoRecoverInt, &s.RecoverTimeoutSec, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -504,11 +504,11 @@ func (r *Repository) CreateStream(s *models.Stream) (*models.Stream, error) {
 	}
 
 	_, err := r.db.Exec(`INSERT INTO streams (id, name, slug, tvg_id, tvg_name, tvg_chno, media_url, logo_id, logo_url,
-		program_id, mode, idle_timeout_sec, buffer_size, fifo_size, use_gpu, overrun_nonfatal, enabled,
+		program_id, local_addr, mode, idle_timeout_sec, buffer_size, fifo_size, use_gpu, overrun_nonfatal, enabled,
 		auto_recover, recover_timeout_sec, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		s.ID, s.Name, s.Slug, s.TVGId, s.TVGName, s.TVGChno, s.MediaURL, s.LogoID, s.LogoURL,
-		s.ProgramID, s.Mode, s.IdleTimeoutSec, s.BufferSize, s.FifoSize, useGPUInt, overrunInt, enabledInt,
+		s.ProgramID, s.LocalAddr, s.Mode, s.IdleTimeoutSec, s.BufferSize, s.FifoSize, useGPUInt, overrunInt, enabledInt,
 		autoRecoverInt, s.RecoverTimeoutSec, s.CreatedAt, s.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -550,10 +550,10 @@ func (r *Repository) UpdateStream(s *models.Stream) error {
 	}
 
 	_, err := r.db.Exec(`UPDATE streams SET name = ?, slug = ?, tvg_id = ?, tvg_name = ?, tvg_chno = ?, media_url = ?,
-		logo_id = ?, logo_url = ?, program_id = ?, mode = ?, idle_timeout_sec = ?, buffer_size = ?, fifo_size = ?,
+		logo_id = ?, logo_url = ?, program_id = ?, local_addr = ?, mode = ?, idle_timeout_sec = ?, buffer_size = ?, fifo_size = ?,
 		use_gpu = ?, overrun_nonfatal = ?, enabled = ?, auto_recover = ?, recover_timeout_sec = ?, updated_at = ? WHERE id = ?`,
 		s.Name, s.Slug, s.TVGId, s.TVGName, s.TVGChno, s.MediaURL, s.LogoID, s.LogoURL,
-		s.ProgramID, s.Mode, s.IdleTimeoutSec, s.BufferSize, s.FifoSize, useGPUInt, overrunInt, enabledInt,
+		s.ProgramID, s.LocalAddr, s.Mode, s.IdleTimeoutSec, s.BufferSize, s.FifoSize, useGPUInt, overrunInt, enabledInt,
 		autoRecoverInt, s.RecoverTimeoutSec, s.UpdatedAt, s.ID)
 	if err != nil {
 		return err

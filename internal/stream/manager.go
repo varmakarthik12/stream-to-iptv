@@ -575,20 +575,37 @@ func buildFFmpegArgs(stream *models.Stream, streamDir string) []string {
 	isUDP := strings.HasPrefix(strings.ToLower(stream.MediaURL), "udp://")
 
 	if isUDP {
-		inputParams = append(inputParams, fmt.Sprintf("fifo_size=%s", fifoSize))
-		inputParams = append(inputParams, fmt.Sprintf("buffer_size=%s", bufferSize))
-		inputParams = append(inputParams, "overrun_nonfatal=1")
+		localAddr := strings.TrimSpace(stream.LocalAddr)
+		if localAddr == "" {
+			localAddr = strings.TrimSpace(os.Getenv("IP_ADDR"))
+		}
+		if localAddr != "" && !strings.Contains(stream.MediaURL, "localaddr=") {
+			inputParams = append(inputParams, fmt.Sprintf("localaddr=%s", localAddr))
+		}
+		if !strings.Contains(stream.MediaURL, "fifo_size=") {
+			inputParams = append(inputParams, fmt.Sprintf("fifo_size=%s", fifoSize))
+		}
+		if !strings.Contains(stream.MediaURL, "buffer_size=") {
+			inputParams = append(inputParams, fmt.Sprintf("buffer_size=%s", bufferSize))
+		}
+		if !strings.Contains(stream.MediaURL, "overrun_nonfatal=") {
+			inputParams = append(inputParams, "overrun_nonfatal=1")
+		}
 	} else {
-		if stream.FifoSize != "" {
+		if stream.FifoSize != "" && !strings.Contains(stream.MediaURL, "fifo_size=") {
 			inputParams = append(inputParams, fmt.Sprintf("fifo_size=%s", stream.FifoSize))
 		}
-		if stream.OverrunNonfatal {
+		if stream.OverrunNonfatal && !strings.Contains(stream.MediaURL, "overrun_nonfatal=") {
 			inputParams = append(inputParams, "overrun_nonfatal=1")
 		}
 	}
 
-	if len(inputParams) > 0 && !strings.Contains(stream.MediaURL, "?") {
-		input = fmt.Sprintf("%s?%s", stream.MediaURL, strings.Join(inputParams, "&"))
+	if len(inputParams) > 0 {
+		sep := "?"
+		if strings.Contains(input, "?") {
+			sep = "&"
+		}
+		input = fmt.Sprintf("%s%s%s", input, sep, strings.Join(inputParams, "&"))
 	}
 
 	// Global / input options

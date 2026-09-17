@@ -30,6 +30,7 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
   const [bufferSize, setBufferSize] = useState(stream?.buffer_size || '1000000');
   const [fifoSize, setFifoSize] = useState(stream?.fifo_size || '');
   const [programId, setProgramId] = useState(stream?.program_id || '1');
+  const [localAddr, setLocalAddr] = useState(stream?.local_addr || '');
   const [useGpu, setUseGpu] = useState(stream ? stream.use_gpu : false);
   const [overrunNonfatal, setOverrunNonfatal] = useState(stream ? stream.overrun_nonfatal : false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -217,6 +218,7 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
         buffer_size: bufferSize.trim(),
         fifo_size: fifoSize.trim(),
         program_id: programId.trim(),
+        local_addr: localAddr.trim(),
         use_gpu: useGpu,
         overrun_nonfatal: overrunNonfatal,
         logo_id: finalLogoId,
@@ -854,15 +856,44 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
             </button>
 
             {showAdvanced && (
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Program ID</label>
+                  <input
+                    type="text"
+                    value={programId}
+                    onChange={(e) => setProgramId(e.target.value)}
+                    placeholder="1"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    MPEG-TS program to stream (-map 0:p:&lt;id&gt;). Defaults to 1.
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Local Interface IP (localaddr)</label>
+                  <input
+                    type="text"
+                    value={localAddr}
+                    onChange={(e) => setLocalAddr(e.target.value)}
+                    placeholder="e.g. 192.168.1.50 (optional)"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    NIC IP to bind for UDP multicast. Defaults to IP_ADDR env or OS default.
+                  </span>
+                </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">Buffer Size</label>
                   <input
                     type="text"
                     value={bufferSize}
                     onChange={(e) => setBufferSize(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                   />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Network socket buffer size in bytes. Defaults to 1000000.
+                  </span>
                 </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">FIFO Size</label>
@@ -870,19 +901,14 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
                     type="text"
                     value={fifoSize}
                     onChange={(e) => setFifoSize(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200"
+                    placeholder="1000000"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-indigo-500"
                   />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Ring buffer size for UDP streams. Defaults to 1000000.
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Program ID</label>
-                  <input
-                    type="text"
-                    value={programId}
-                    onChange={(e) => setProgramId(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200"
-                  />
-                </div>
-                <div className="sm:col-span-3 flex items-center space-x-6 pt-2">
+                <div className="sm:col-span-2 flex items-center space-x-6 pt-2">
                   <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
                     <input
                       type="checkbox"

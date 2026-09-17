@@ -67,6 +67,8 @@ func TestCategoriesAndStreamRepository(t *testing.T) {
 		Slug:              "test-espn",
 		MediaURL:          "udp://@239.255.0.1:1234",
 		TVGId:             "espn.us",
+		ProgramID:         "101",
+		LocalAddr:         "192.168.1.55",
 		Mode:              "ondemand",
 		IdleTimeoutSec:    120,
 		AutoRecover:       true,
@@ -89,11 +91,25 @@ func TestCategoriesAndStreamRepository(t *testing.T) {
 		t.Fatalf("Failed to fetch stream: %v", err)
 	}
 
-	if fetched.Name != "Test ESPN" || !fetched.AutoRecover || fetched.RecoverTimeoutSec != 25 {
+	if fetched.Name != "Test ESPN" || !fetched.AutoRecover || fetched.RecoverTimeoutSec != 25 || fetched.LocalAddr != "192.168.1.55" || fetched.ProgramID != "101" {
 		t.Errorf("Stream data mismatch: %+v", fetched)
 	}
 
 	if len(fetched.Categories) != 1 || fetched.Categories[0].Name != "Sports" {
 		t.Errorf("Expected category 'Sports' to be mapped, got %+v", fetched.Categories)
+	}
+
+	// Test updating LocalAddr
+	fetched.LocalAddr = "10.0.0.42"
+	if err := repo.UpdateStream(fetched); err != nil {
+		t.Fatalf("Failed to update stream: %v", err)
+	}
+
+	updated, err := repo.GetStreamBySlug(fetched.Slug)
+	if err != nil {
+		t.Fatalf("Failed to fetch updated stream by slug: %v", err)
+	}
+	if updated.LocalAddr != "10.0.0.42" {
+		t.Errorf("Expected updated LocalAddr '10.0.0.42', got '%s'", updated.LocalAddr)
 	}
 }

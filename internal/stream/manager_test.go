@@ -4,7 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+
+	"stream-to-iptv/internal/models"
 )
 
 func TestResolveSystemFFmpeg(t *testing.T) {
@@ -63,3 +66,66 @@ func TestUnwrapWindowsShim_Scoop(t *testing.T) {
 		t.Fatalf("Expected Scoop shim unwrapped to %s, got %s", realTarget, resolved)
 	}
 }
+
+func TestBuildFFmpegArgs_LocalAddrAndProgramID(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// 1. Explicit LocalAddr on stream
+	s1 := &models.Stream{
+		Slug:       "test-stream-1",
+		MediaURL:   "udp://@239.255.10.10:1234",
+		ProgramID:  "105",
+		LocalAddr:  "192.168.1.50",
+		BufferSize: "2000000",
+		FifoSize:   "500000",
+	}
+	args1 := buildFFmpegArgs(s1, tempDir)
+	args1Str := strings.Join(args1, " ")
+
+	if !strings.Contains(args1Str, "localaddr=192.168.1.50") {
+		t.Errorf("Expected args to contain localaddr=192.168.1.50, got: %s", args1Str)
+	}
+	if !strings.Contains(args1Str, "-map 0:p:105") {
+		t.Errorf("Expected args to contain -map 0:p:105, got: %s", args1Str)
+	}
+	if !strings.Contains(args1Str, "fifo_size=500000") {
+		t.Errorf("Expected args to contain fifo_size=500000, got: %s", args1Str)
+	}
+
+	// 2. Fallback to IP_ADDR environment variable when LocalAddr is empty
+	t.Setenv("IP_ADDR", "10.0.0.99")
+	s2 := &models.Stream{
+		Slug:       "test-stream-2",
+		MediaURL:   "udp://@239.255.10.10:1234",
+		ProgramID:  "200",
+		LocalAddr:  "",
+		BufferSize: "1000000",
+	}
+	args2 := buildFFmpegArgs(s2, tempDir)
+	args2Str := strings.Join(args2, " ")
+
+	if !strings.Contains(args2Str, "localaddr=10.0.0.99") {
+		t.Errorf("Expected fallback to IP_ADDR env var (localaddr=10.0.0.99), got: %s", args2Str)
+	}
+	if !strings.Contains(args2Str, "-map 0:p:200") {
+		t.Errorf("Expected args to contain -map 0:p:200, got: %s", args2Str)
+	}
+
+	// 3. MediaURL with existing query parameters
+	s3 := &models.Stream{
+		Slug:       "test-stream-3",
+		MediaURL:   "udp://@239.255.10.10:1234?pkt_size=1316",
+		ProgramID:  "1",
+		LocalAddr:  "172.16.0.2",
+	}
+	args3 := buildFFmpegArgs(s3, tempDir)
+	args3Str := strings.Join(args3, " ")
+
+	if !strings.Contains(args3Str, "pkt_size=1316&") && !strings.Contains(args3Str, "pkt_size=1316") {
+		t.Errorf("Expected existing query param pkt_size=1316 to be preserved, got: %s", args3Str)
+	}
+	if !strings.Contains(args3Str, "localaddr=172.16.0.2") {
+		t.Errorf("Expected localaddr=172.16.0.2 to be appended, got: %s", args3Str)
+	}
+}
+

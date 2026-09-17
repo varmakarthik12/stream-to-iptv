@@ -73,6 +73,7 @@ type Stream struct {
 	LogoID           string            `json:"logo_id"`
 	LogoURL          string            `json:"logo_url"`
 	ProgramID        string            `json:"program_id"`
+	LocalAddr        string            `json:"local_addr"`
 	Mode             string            `json:"mode"` // ondemand, always_on
 	IdleTimeoutSec   int               `json:"idle_timeout_sec"`
 	AutoRecover      bool              `json:"auto_recover"`

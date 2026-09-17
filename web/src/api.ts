@@ -64,6 +64,7 @@ export interface Stream {
   logo_id: string;
   logo_url: string;
   program_id: string;
+  local_addr?: string;
   mode: 'ondemand' | 'always_on';
   idle_timeout_sec: number;
   auto_recover?: boolean;
