@@ -198,6 +198,8 @@ export const api = {
   getEPGSources: () => request<EPGSource[]>('/api/epg-sources'),
   createEPGSource: (data: { name: string; url: string; refresh_interval_hours: number }) =>
     request<EPGSource>('/api/epg-sources', { method: 'POST', body: JSON.stringify(data) }),
+  bulkCreateEPGSources: (sources: { name: string; url: string; refresh_interval_hours?: number }[]) =>
+    request<EPGSource[]>('/api/epg-sources/bulk', { method: 'POST', body: JSON.stringify(sources) }),
   updateEPGSource: (id: string, data: { name: string; url: string; refresh_interval_hours: number }) =>
     request<{ success: boolean }>(`/api/epg-sources/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteEPGSource: (id: string) =>

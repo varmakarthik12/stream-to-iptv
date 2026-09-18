@@ -62,7 +62,7 @@ func RegisterRoutes(
 
 	r.Get("/epg.xml", func(w http.ResponseWriter, req *http.Request) {
 		epgPath := filepath.Join(db.GetEPGDir(), "generated_epg.xml")
-		if _, err := os.Stat(epgPath); os.IsNotExist(err) {
+		if fi, err := os.Stat(epgPath); os.IsNotExist(err) || fi.Size() == 0 {
 			_ = epgService.GenerateMergedEPG()
 		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -72,7 +72,7 @@ func RegisterRoutes(
 
 	r.Get("/epg.xml.gz", func(w http.ResponseWriter, req *http.Request) {
 		epgGzPath := filepath.Join(db.GetEPGDir(), "generated_epg.xml.gz")
-		if _, err := os.Stat(epgGzPath); os.IsNotExist(err) {
+		if fi, err := os.Stat(epgGzPath); os.IsNotExist(err) || fi.Size() == 0 {
 			_ = epgService.GenerateMergedEPG()
 		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -229,6 +229,7 @@ func RegisterRoutes(
 			// EPG
 			protected.Get("/epg-sources", apiHandler.ListEPGSources)
 			protected.Post("/epg-sources", apiHandler.CreateEPGSource)
+			protected.Post("/epg-sources/bulk", apiHandler.BulkCreateEPGSources)
 			protected.Put("/epg-sources/{id}", apiHandler.UpdateEPGSource)
 			protected.Delete("/epg-sources/{id}", apiHandler.DeleteEPGSource)
 			protected.Post("/epg-sources/{id}/refresh", apiHandler.RefreshEPGSource)

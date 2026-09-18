@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"stream-to-iptv/internal/db"
+	"stream-to-iptv/internal/models"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -53,6 +55,43 @@ func (h *APIHandler) CreateEPGSource(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(src)
+}
+
+func (h *APIHandler) BulkCreateEPGSources(w http.ResponseWriter, r *http.Request) {
+	var req []struct {
+		Name                 string `json:"name"`
+		URL                  string `json:"url"`
+		RefreshIntervalHours int    `json:"refresh_interval_hours"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	var createdSources []*models.EPGSource
+	for _, item := range req {
+		url := strings.TrimSpace(item.URL)
+		if url == "" {
+			continue
+		}
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			name = url
+		}
+		interval := item.RefreshIntervalHours
+		if interval <= 0 {
+			interval = 24
+		}
+		src, err := h.repo.CreateEPGSource(name, url, interval)
+		if err == nil && src != nil {
+			createdSources = append(createdSources, src)
+			go h.epgService.RefreshSource(src.ID)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(createdSources)
 }
 
 func (h *APIHandler) UpdateEPGSource(w http.ResponseWriter, r *http.Request) {

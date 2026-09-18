@@ -30,14 +30,10 @@ type XMLTVChannel struct {
 	} `xml:"icon"`
 }
 
-type XMLTVProgramme struct {
-	XMLName  xml.Name `xml:"programme"`
-	Start    string   `xml:"start,attr"`
-	Stop     string   `xml:"stop,attr"`
-	Channel  string   `xml:"channel,attr"`
-	Title    string   `xml:"title"`
-	Desc     string   `xml:"desc"`
-	Category string   `xml:"category"`
+type XMLTVProgrammeElement struct {
+	XMLName xml.Name   `xml:"programme"`
+	Attrs   []xml.Attr `xml:",any,attr"`
+	Inner   []byte     `xml:",innerxml"`
 }
 
 type EPGService struct {
@@ -157,7 +153,9 @@ func (s *EPGService) RefreshSource(sourceID string) error {
 
 func (s *EPGService) parseChannels(r io.Reader) ([]models.EPGChannel, error) {
 	decoder := xml.NewDecoder(r)
+	decoder.Entity = xml.HTMLEntity
 	var channels []models.EPGChannel
+	consecutiveProgrammes := 0
 
 	for {
 		t, err := decoder.Token()
@@ -171,6 +169,7 @@ func (s *EPGService) parseChannels(r io.Reader) ([]models.EPGChannel, error) {
 		switch se := t.(type) {
 		case xml.StartElement:
 			if se.Name.Local == "channel" {
+				consecutiveProgrammes = 0
 				var ch XMLTVChannel
 				if err := decoder.DecodeElement(&ch, &se); err == nil {
 					channels = append(channels, models.EPGChannel{
@@ -180,9 +179,13 @@ func (s *EPGService) parseChannels(r io.Reader) ([]models.EPGChannel, error) {
 					})
 				}
 			} else if se.Name.Local == "programme" {
-				// Once programmes start, we have scanned all channels in standard XMLTV
-				// Skip the rest for fast channel list indexing
-				return channels, nil
+				consecutiveProgrammes++
+				// Once programmes start and we have seen a solid batch with no channels,
+				// stop scanning for fast channel list indexing
+				if consecutiveProgrammes > 100 && len(channels) > 0 {
+					return channels, nil
+				}
+				_ = decoder.Skip()
 			}
 		}
 	}
@@ -225,9 +228,14 @@ func (s *EPGService) GenerateMergedEPG() error {
 			continue
 		}
 
+		// TVGId resolution consistent with playlist.m3u
 		tvgID := st.TVGId
 		if tvgID == "" {
-			tvgID = st.Slug
+			if st.EPGMapping != nil && st.EPGMapping.PrimaryChannelID != "" {
+				tvgID = st.EPGMapping.PrimaryChannelID
+			} else {
+				tvgID = st.Slug
+			}
 		}
 
 		logoURL := st.LogoURL
@@ -266,15 +274,33 @@ func (s *EPGService) GenerateMergedEPG() error {
 		mapped = append(mapped, mc)
 	}
 
+	// Retrieve all active EPG sources
+	allSources, _ := s.repo.GetAllEPGSources()
+	allSourceIDs := make([]string, 0, len(allSources))
+	for _, src := range allSources {
+		allSourceIDs = append(allSourceIDs, src.ID)
+	}
+
+	// For streams that do not have an explicit primary source assigned, allow auto-discovery across all active sources
+	for _, mc := range mapped {
+		if mc.PrimarySourceID == "" || mc.PrimaryChannelID == "" {
+			for _, srcID := range allSourceIDs {
+				sourcesNeeded[srcID] = true
+			}
+			break
+		}
+	}
+
 	// Output paths
 	destPath := filepath.Join(db.GetEPGDir(), "generated_epg.xml")
 	destGzPath := filepath.Join(db.GetEPGDir(), "generated_epg.xml.gz")
+	tmpPath := destPath + ".tmp"
+	tmpGzPath := destGzPath + ".tmp"
 
-	outFile, err := os.Create(destPath)
+	outFile, err := os.Create(tmpPath)
 	if err != nil {
 		return err
 	}
-	defer outFile.Close()
 
 	// Write XML Header
 	outFile.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
@@ -301,15 +327,20 @@ func (s *EPGService) GenerateMergedEPG() error {
 			continue
 		}
 
-		// Build map of sourceChannelID -> targetTVGId for this source
-		channelMap := make(map[string]string)
+		// Build map of sourceChannelID -> slice of target mappedChannel
+		// This supports multiple streams mapped to the same channel without overwriting
+		channelMap := make(map[string][]mappedChannel)
 		for _, mc := range mapped {
 			if mc.PrimarySourceID == sourceID && mc.PrimaryChannelID != "" {
-				channelMap[mc.PrimaryChannelID] = mc.TVGId
+				channelMap[mc.PrimaryChannelID] = append(channelMap[mc.PrimaryChannelID], mc)
+			} else if (mc.PrimarySourceID == "" || mc.PrimarySourceID == sourceID) && mc.TVGId != "" {
+				channelMap[mc.TVGId] = append(channelMap[mc.TVGId], mc)
 			}
 		}
 
 		decoder := xml.NewDecoder(f)
+		decoder.Entity = xml.HTMLEntity
+
 		for {
 			t, err := decoder.Token()
 			if err != nil {
@@ -319,11 +350,20 @@ func (s *EPGService) GenerateMergedEPG() error {
 			switch se := t.(type) {
 			case xml.StartElement:
 				if se.Name.Local == "programme" {
-					var prog XMLTVProgramme
+					var prog XMLTVProgrammeElement
 					if err := decoder.DecodeElement(&prog, &se); err == nil {
-						if targetTVG, ok := channelMap[prog.Channel]; ok {
-							programmesFound[targetTVG]++
-							writeProgramme(outFile, prog, targetTVG)
+						var chID string
+						for _, a := range prog.Attrs {
+							if a.Name.Local == "channel" {
+								chID = a.Value
+								break
+							}
+						}
+						if targetMCs, ok := channelMap[chID]; ok {
+							for _, targetMC := range targetMCs {
+								programmesFound[targetMC.TVGId]++
+								writeProgrammeElement(outFile, prog, targetMC.TVGId, targetMC.LogoURL)
+							}
 						}
 					}
 				}
@@ -342,6 +382,8 @@ func (s *EPGService) GenerateMergedEPG() error {
 			}
 
 			decoder := xml.NewDecoder(f)
+			decoder.Entity = xml.HTMLEntity
+
 			for {
 				t, err := decoder.Token()
 				if err != nil {
@@ -350,10 +392,18 @@ func (s *EPGService) GenerateMergedEPG() error {
 				switch se := t.(type) {
 				case xml.StartElement:
 					if se.Name.Local == "programme" {
-						var prog XMLTVProgramme
+						var prog XMLTVProgrammeElement
 						if err := decoder.DecodeElement(&prog, &se); err == nil {
-							if prog.Channel == mc.FallbackChannelID {
-								writeProgramme(outFile, prog, mc.TVGId)
+							var chID string
+							for _, a := range prog.Attrs {
+								if a.Name.Local == "channel" {
+									chID = a.Value
+									break
+								}
+							}
+							if chID == mc.FallbackChannelID {
+								programmesFound[mc.TVGId]++
+								writeProgrammeElement(outFile, prog, mc.TVGId, mc.LogoURL)
 							}
 						}
 					}
@@ -363,29 +413,105 @@ func (s *EPGService) GenerateMergedEPG() error {
 		}
 	}
 
+	// 4. Secondary fallback: check any other available active EPG source for matching TVGId
+	for _, mc := range mapped {
+		if programmesFound[mc.TVGId] == 0 && mc.TVGId != "" {
+			for _, srcID := range allSourceIDs {
+				if srcID == mc.PrimarySourceID || srcID == mc.FallbackSourceID {
+					continue
+				}
+				cacheFile := filepath.Join(db.GetEPGDir(), fmt.Sprintf("source_%s.xml", srcID))
+				f, err := os.Open(cacheFile)
+				if err != nil {
+					continue
+				}
+
+				decoder := xml.NewDecoder(f)
+				decoder.Entity = xml.HTMLEntity
+
+				for {
+					t, err := decoder.Token()
+					if err != nil {
+						break
+					}
+					switch se := t.(type) {
+					case xml.StartElement:
+						if se.Name.Local == "programme" {
+							var prog XMLTVProgrammeElement
+							if err := decoder.DecodeElement(&prog, &se); err == nil {
+								var chID string
+								for _, a := range prog.Attrs {
+									if a.Name.Local == "channel" {
+										chID = a.Value
+										break
+									}
+								}
+								if chID == mc.TVGId {
+									programmesFound[mc.TVGId]++
+									writeProgrammeElement(outFile, prog, mc.TVGId, mc.LogoURL)
+								}
+							}
+						}
+					}
+				}
+				f.Close()
+				if programmesFound[mc.TVGId] > 0 {
+					break
+				}
+			}
+		}
+	}
+
 	outFile.WriteString("</tv>\n")
 	outFile.Sync()
+	outFile.Close()
 
-	// Compress to .gz
-	_ = compressFile(destPath, destGzPath)
+	// Atomic replace for uncompressed XML
+	_ = os.Rename(tmpPath, destPath)
 
-	logrus.Info("Merged XMLTV EPG generated successfully")
+	// Compress to .gz atomically
+	if err := compressFile(destPath, tmpGzPath); err == nil {
+		_ = os.Rename(tmpGzPath, destGzPath)
+	}
+
+	logrus.Infof("Merged XMLTV EPG generated successfully (%d streams mapped)", len(mapped))
 	return nil
 }
 
-func writeProgramme(w io.Writer, p XMLTVProgramme, targetChannelID string) {
-	fmt.Fprintf(w, "  <programme start=\"%s\" stop=\"%s\" channel=\"%s\">\n",
-		xmlEscape(p.Start), xmlEscape(p.Stop), xmlEscape(targetChannelID))
-	if p.Title != "" {
-		fmt.Fprintf(w, "    <title>%s</title>\n", xmlEscape(p.Title))
+func writeProgrammeElement(w io.Writer, p XMLTVProgrammeElement, targetChannelID, channelLogoURL string) {
+	fmt.Fprintf(w, "  <programme")
+	for _, a := range p.Attrs {
+		if a.Name.Local == "channel" {
+			fmt.Fprintf(w, " channel=\"%s\"", xmlEscape(targetChannelID))
+		} else {
+			fmt.Fprintf(w, " %s=\"%s\"", a.Name.Local, xmlEscape(a.Value))
+		}
 	}
-	if p.Desc != "" {
-		fmt.Fprintf(w, "    <desc>%s</desc>\n", xmlEscape(p.Desc))
+	fmt.Fprintf(w, ">\n")
+
+	innerStr := string(p.Inner)
+	// If program has no poster/icon, inject channel's icon as fallback
+	hasIcon := strings.Contains(innerStr, "<icon")
+	if !hasIcon && channelLogoURL != "" {
+		fmt.Fprintf(w, "    <icon src=\"%s\" />\n", xmlEscape(channelLogoURL))
 	}
-	if p.Category != "" {
-		fmt.Fprintf(w, "    <category>%s</category>\n", xmlEscape(p.Category))
-	}
-	w.Write([]byte("  </programme>\n"))
+	// Sanitize control characters that are forbidden in XML 1.0
+	cleanInner := cleanXMLText(innerStr)
+	w.Write([]byte("    "))
+	w.Write([]byte(cleanInner))
+	w.Write([]byte("\n  </programme>\n"))
+}
+
+func cleanXMLText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == 0x09 || r == 0x0A || r == 0x0D ||
+			(r >= 0x20 && r <= 0xD7FF) ||
+			(r >= 0xE000 && r <= 0xFFFD) ||
+			(r >= 0x10000 && r <= 0x10FFFF) {
+			return r
+		}
+		return -1
+	}, s)
 }
 
 func xmlEscape(s string) string {

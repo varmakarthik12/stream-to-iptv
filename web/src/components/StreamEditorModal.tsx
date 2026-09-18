@@ -13,8 +13,15 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
   const [name, setName] = useState(stream?.name || '');
   const [slug, setSlug] = useState(stream?.slug || '');
   const [mediaUrl, setMediaUrl] = useState(stream?.media_url || '');
-  const [tvgId, setTvgId] = useState(stream?.tvg_id || '');
-  const [tvgName, setTvgName] = useState(stream?.tvg_name || '');
+
+  // Pre-fill TVG ID and TVG Display Name automatically
+  const initialTvgId = stream?.tvg_id || stream?.epg_mapping?.primary_channel_id || stream?.slug || '';
+  const initialTvgName = stream?.tvg_name || stream?.name || '';
+  const [tvgId, setTvgId] = useState(initialTvgId);
+  const [tvgName, setTvgName] = useState(initialTvgName);
+  const [tvgIdCustom, setTvgIdCustom] = useState(Boolean(stream?.tvg_id && stream.tvg_id !== stream.slug && stream.tvg_id !== stream?.epg_mapping?.primary_channel_id));
+  const [tvgNameCustom, setTvgNameCustom] = useState(Boolean(stream?.tvg_name && stream.tvg_name !== stream.name));
+
   const [tvgChno, setTvgChno] = useState(stream?.tvg_chno || '');
   const [mode, setMode] = useState<'ondemand' | 'always_on'>(stream?.mode || 'ondemand');
   const [idleTimeoutSec, setIdleTimeoutSec] = useState(stream?.idle_timeout_sec || 180);
@@ -88,22 +95,28 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
     }
   };
 
-  // Auto-generate slug from name if new
+  // Auto-generate slug from name and pre-fill TVG ID and TVG Display Name
   useEffect(() => {
-    if (!stream && name) {
-      const generated = name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
-      setSlug(generated);
-      if (!tvgId) setTvgId(generated);
-      if (!tvgName) setTvgName(name);
-    }
-  }, [name, stream]);
+    if (!name) return;
+    const generated = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
 
-  // Search EPG channels
+    if (!stream) {
+      setSlug(generated);
+    }
+    if (!tvgNameCustom) {
+      setTvgName(name);
+    }
+    if (!tvgIdCustom && !primaryChannelId) {
+      setTvgId(stream?.slug || generated);
+    }
+  }, [name, stream, tvgNameCustom, tvgIdCustom, primaryChannelId]);
+
+  // Search EPG channels (supports searching across all sources when primarySourceId is empty)
   useEffect(() => {
-    if (!primarySourceId || primarySearch.trim().length === 0) {
+    if (primarySearch.trim().length === 0) {
       setPrimarySearchResults([]);
       return;
     }
@@ -205,12 +218,15 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
         }
       }
 
+      const computedTvgId = tvgId.trim() || primaryChannelId.trim() || slug.trim();
+      const computedTvgName = tvgName.trim() || name.trim();
+
       const payload: Partial<Stream> = {
         name: name.trim(),
         slug: slug.trim(),
         media_url: mediaUrl.trim(),
-        tvg_id: tvgId.trim(),
-        tvg_name: tvgName.trim(),
+        tvg_id: computedTvgId,
+        tvg_name: computedTvgName,
         tvg_chno: tvgChno.trim(),
         mode,
         idle_timeout_sec: Number(idleTimeoutSec) || 180,
@@ -679,6 +695,9 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-200">Primary EPG Source</span>
+                {epgSources.length > 1 && (
+                  <span className="text-[10px] text-slate-500">Multiple EPG providers active</span>
+                )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -686,12 +705,10 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
                     value={primarySourceId}
                     onChange={(e) => {
                       setPrimarySourceId(e.target.value);
-                      setPrimaryChannelId('');
-                      setPrimarySearch('');
                     }}
                     className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200"
                   >
-                    <option value="">-- Select EPG Source --</option>
+                    <option value="">All EPG Sources (Auto-Detect)</option>
                     {epgSources.map((s) => (
                       <option key={s.id} value={s.id}>{s.name} ({s.channel_count} channels)</option>
                     ))}
@@ -701,34 +718,43 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
                 <div className="relative">
                   <input
                     type="text"
-                    disabled={!primarySourceId}
-                    placeholder="Search channel in EPG..."
+                    placeholder={primarySourceId ? "Search channel in EPG..." : "Search channel across all EPG sources..."}
                     value={primarySearch}
                     onChange={(e) => setPrimarySearch(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 disabled:opacity-50"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200"
                   />
                   {primarySearchResults.length > 0 && (
                     <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-slate-900 border border-slate-800 rounded-lg shadow-xl max-h-48 overflow-y-auto">
-                      {primarySearchResults.map((ch) => (
-                        <div
-                          key={ch.id}
-                          onClick={() => {
-                            setPrimaryChannelId(ch.channel_id);
-                            setPrimarySearch(`${ch.display_name} (${ch.channel_id})`);
-                            setPrimarySearchResults([]);
-                            if (!tvgId || tvgId === slug) {
+                      {primarySearchResults.map((ch) => {
+                        const src = epgSources.find((s) => s.id === ch.epg_source_id);
+                        return (
+                          <div
+                            key={ch.id}
+                            onClick={() => {
+                              setPrimarySourceId(ch.epg_source_id);
+                              setPrimaryChannelId(ch.channel_id);
+                              setPrimarySearch(`${ch.display_name} (${ch.channel_id})`);
+                              setPrimarySearchResults([]);
                               setTvgId(ch.channel_id);
-                            }
-                            if (!tvgName || tvgName === name) {
-                              setTvgName(ch.display_name || name);
-                            }
-                          }}
-                          className="px-3 py-2 hover:bg-slate-800 cursor-pointer text-xs border-b border-slate-800/50 flex justify-between items-center"
-                        >
-                          <span className="text-slate-200">{ch.display_name}</span>
-                          <span className="text-slate-500 font-mono text-[10px]">{ch.channel_id}</span>
-                        </div>
-                      ))}
+                              setTvgIdCustom(false);
+                              if (!tvgNameCustom) {
+                                setTvgName(ch.display_name || name);
+                              }
+                              if (!selectedLogoId && !customLogoUrl && ch.icon_url) {
+                                setCustomLogoUrl(ch.icon_url);
+                                setLogoTab('url');
+                              }
+                            }}
+                            className="px-3 py-2 hover:bg-slate-800 cursor-pointer text-xs border-b border-slate-800/50 flex justify-between items-center"
+                          >
+                            <div className="flex flex-col">
+                              <span className="text-slate-200 font-medium">{ch.display_name}</span>
+                              {src && <span className="text-[10px] text-indigo-400">{src.name}</span>}
+                            </div>
+                            <span className="text-slate-500 font-mono text-[10px]">{ch.channel_id}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -801,27 +827,31 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
               )}
             </div>
 
-            {/* Optional TVG / XMLTV Overrides */}
+            {/* TVG / XMLTV Overrides */}
             <div className="bg-slate-950/70 p-4 rounded-xl border border-slate-800/80 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                 <span className="text-xs font-semibold text-slate-300 flex items-center space-x-2">
-                  <span>XMLTV & TVG Metadata Overrides</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">Optional</span>
+                  <span>XMLTV & TVG Metadata</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono">Auto-Generated</span>
                 </span>
-                <span className="text-[11px] text-slate-500">Auto-inherited from EPG mapping & channel name</span>
+                <span className="text-[11px] text-slate-500">Auto-filled from EPG mapping & channel name. You can customize if needed.</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1 font-medium">
-                    TVG ID (XMLTV Identifier)
+                  <label className="block text-[11px] text-slate-400 mb-1 font-medium flex items-center justify-between">
+                    <span>TVG ID (XMLTV Identifier)</span>
+                    <span className="text-[10px] text-indigo-400 font-mono">tvg-id</span>
                   </label>
                   <input
                     type="text"
                     placeholder={primaryChannelId || slug || 'Auto-inherited from EPG mapping or slug'}
                     value={tvgId}
-                    onChange={(e) => setTvgId(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                    onChange={(e) => {
+                      setTvgId(e.target.value);
+                      setTvgIdCustom(true);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-mono font-bold text-indigo-300 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">
                     Matches <code className="text-slate-400">&lt;channel id="..."&gt;</code> in XMLTV guide. Defaults to mapped EPG channel or slug.
@@ -829,15 +859,19 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1 font-medium">
-                    TVG Display Name (tvg-name)
+                  <label className="block text-[11px] text-slate-400 mb-1 font-medium flex items-center justify-between">
+                    <span>TVG Display Name</span>
+                    <span className="text-[10px] text-indigo-400 font-mono">tvg-name</span>
                   </label>
                   <input
                     type="text"
                     placeholder={name || 'Auto-inherited from channel name'}
                     value={tvgName}
-                    onChange={(e) => setTvgName(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                    onChange={(e) => {
+                      setTvgName(e.target.value);
+                      setTvgNameCustom(true);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">
                     Secondary display name for IPTV players. Defaults to channel name.

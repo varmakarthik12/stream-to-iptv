@@ -94,6 +94,17 @@ func (h *APIHandler) CreateStream(w http.ResponseWriter, r *http.Request) {
 		st.BufferSize = "1000000"
 	}
 
+	if strings.TrimSpace(st.TVGName) == "" {
+		st.TVGName = strings.TrimSpace(st.Name)
+	}
+	if strings.TrimSpace(st.TVGId) == "" {
+		if st.EPGMapping != nil && strings.TrimSpace(st.EPGMapping.PrimaryChannelID) != "" {
+			st.TVGId = strings.TrimSpace(st.EPGMapping.PrimaryChannelID)
+		} else {
+			st.TVGId = st.Slug
+		}
+	}
+
 	created, err := h.repo.CreateStream(&st)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create stream: %v", err), http.StatusInternalServerError)
@@ -137,6 +148,17 @@ func (h *APIHandler) UpdateStream(w http.ResponseWriter, r *http.Request) {
 		st.Slug = existing.Slug
 	} else {
 		st.Slug = stream.Slugify(st.Slug)
+	}
+
+	if strings.TrimSpace(st.TVGName) == "" {
+		st.TVGName = strings.TrimSpace(st.Name)
+	}
+	if strings.TrimSpace(st.TVGId) == "" {
+		if st.EPGMapping != nil && strings.TrimSpace(st.EPGMapping.PrimaryChannelID) != "" {
+			st.TVGId = strings.TrimSpace(st.EPGMapping.PrimaryChannelID)
+		} else {
+			st.TVGId = st.Slug
+		}
 	}
 
 	if err := h.repo.UpdateStream(&st); err != nil {

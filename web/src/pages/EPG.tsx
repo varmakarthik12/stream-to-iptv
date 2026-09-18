@@ -8,6 +8,9 @@ export const EPG: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Form state
+  const [addMode, setAddMode] = useState<'single' | 'bulk'>('single');
+  const [bulkText, setBulkText] = useState('');
+  const [bulkInterval, setBulkInterval] = useState(24);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [refreshInterval, setRefreshInterval] = useState(24);
@@ -76,6 +79,63 @@ export const EPG: React.FC = () => {
       loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to save EPG source');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleBulkSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulkText.trim()) return;
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      const lines = bulkText.split('\n');
+      const sourcesToCreate: { name: string; url: string; refresh_interval_hours: number }[] = [];
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+
+        let srcName = '';
+        let srcUrl = '';
+
+        if (trimmed.includes('|')) {
+          const parts = trimmed.split('|');
+          srcName = parts[0].trim();
+          srcUrl = parts.slice(1).join('|').trim();
+        } else {
+          srcUrl = trimmed;
+          try {
+            const parsed = new URL(srcUrl);
+            const pathParts = parsed.pathname.split('/').filter(Boolean);
+            const fileName = pathParts[pathParts.length - 1] || parsed.hostname;
+            srcName = `${parsed.hostname} (${fileName.replace(/\.(xml|gz)+$/i, '')})`;
+          } catch {
+            srcName = srcUrl;
+          }
+        }
+
+        if (srcUrl.startsWith('http://') || srcUrl.startsWith('https://')) {
+          sourcesToCreate.push({
+            name: srcName || srcUrl,
+            url: srcUrl,
+            refresh_interval_hours: Number(bulkInterval) || 24,
+          });
+        }
+      }
+
+      if (sourcesToCreate.length === 0) {
+        throw new Error('No valid HTTP/HTTPS URLs found in input.');
+      }
+
+      await api.bulkCreateEPGSources(sourcesToCreate);
+      setBulkText('');
+      setAddMode('single');
+      loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to add multiple EPG sources');
     } finally {
       setSubmitting(false);
     }
@@ -180,10 +240,34 @@ export const EPG: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Source Addition Form */}
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl h-fit">
-          <h3 className="text-base font-bold text-white mb-4 flex items-center space-x-2">
-            <Plus className="w-4 h-4 text-indigo-400" />
-            <span>{editingSource ? 'Edit EPG Source' : 'Add EPG Source'}</span>
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+              <Plus className="w-4 h-4 text-indigo-400" />
+              <span>{editingSource ? 'Edit EPG Source' : 'Add EPG Source'}</span>
+            </h3>
+            {!editingSource && (
+              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setAddMode('single')}
+                  className={`px-2.5 py-1 text-[11px] rounded-lg font-medium transition-all ${
+                    addMode === 'single' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Single
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddMode('bulk')}
+                  className={`px-2.5 py-1 text-[11px] rounded-lg font-medium transition-all ${
+                    addMode === 'bulk' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Add Multiple
+                </button>
+              </div>
+            )}
+          </div>
 
           {error && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center space-x-2 text-red-400 text-xs">
@@ -192,7 +276,52 @@ export const EPG: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSave} className="space-y-4">
+          {addMode === 'bulk' && !editingSource ? (
+            <form onSubmit={handleBulkSave} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Multiple EPG URLs (one per line) <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  rows={5}
+                  required
+                  placeholder={`https://avkb.short.gy/epg.xml.gz\nUS Sports | https://example.com/sports.xml.gz\nUK Guide | https://example.com/uk.xml`}
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                />
+                <span className="text-[11px] text-slate-500 mt-1 block">
+                  Format: <code>URL</code> or <code>Provider Name | URL</code>. Blank lines and lines starting with # are ignored.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center space-x-1.5">
+                  <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Refresh Interval for All (Hours)</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="168"
+                  value={bulkInterval}
+                  onChange={(e) => setBulkInterval(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={submitting || !bulkText.trim()}
+                  className="w-full px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all"
+                >
+                  {submitting ? 'Adding Multiple Sources...' : 'Add All EPG Sources'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleSave} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Provider Name <span className="text-red-400">*</span>
@@ -267,6 +396,7 @@ export const EPG: React.FC = () => {
               </button>
             </div>
           </form>
+          )}
         </div>
 
         {/* Sources List Table */}
