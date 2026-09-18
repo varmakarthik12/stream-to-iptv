@@ -30,21 +30,26 @@ interface StreamPlayerModalProps {
   onClose: () => void;
 }
 
-const isAppleMobileDevice = (): boolean => {
+const isMobileDevice = (): boolean => {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';
   const isIOS = /iPad|iPhone|iPod/.test(ua);
   const isIPadOS =
     (navigator.platform === 'MacIntel' || /Macintosh/.test(ua)) &&
     (navigator.maxTouchPoints > 1 || (navigator as any).standalone !== undefined);
-  const isIOSBrowser = /CriOS|FxiOS|EdgiOS/.test(ua);
-  return isIOS || isIPadOS || isIOSBrowser;
+  const isAndroid = /Android/i.test(ua);
+  const isMobile = /Mobile|Silk|CriOS|FxiOS|EdgiOS/i.test(ua);
+  return isIOS || isIPadOS || isAndroid || isMobile;
 };
 
 export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, onClose }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const cleanupNativeRef = useRef<(() => void) | null>(null);
+  const fallbackAttemptedRef = useRef<{ hlsToNative: boolean; nativeToHls: boolean }>({
+    hlsToNative: false,
+    nativeToHls: false,
+  });
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -54,12 +59,14 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState<boolean>(false);
   const [playerEngine, setPlayerEngine] = useState<string>('Auto');
+  const [canSwitchEngine, setCanSwitchEngine] = useState<boolean>(false);
 
   const playbackUrl =
     stream.playback_url ||
     `${window.location.origin}/stream/${stream.slug}/${stream.slug}.m3u8`;
 
   const setupNativePlayer = (video: HTMLVideoElement, url: string): (() => void) => {
+    setPlayerEngine('Native');
     video.src = url;
     video.load();
 
@@ -88,13 +95,34 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
     const onError = () => {
       const err = video.error;
       if (err && err.code !== MediaError.MEDIA_ERR_ABORTED) {
+        console.warn('Native video error:', err.code, err.message);
+
+        // If native playback fails with decode/source error (common on Apple devices when encountering
+        // broadcast MP2 audio or stream syntax in HLS), seamlessly fallback to HLS.js if MSE is available!
+        if (Hls.isSupported() && !fallbackAttemptedRef.current.nativeToHls) {
+          console.info('Native player error. Falling back to HLS.js engine...');
+          fallbackAttemptedRef.current.nativeToHls = true;
+          setErrorMsg(null);
+
+          // Clean up native listeners and source
+          video.removeEventListener('loadedmetadata', onLoadedMetadata);
+          video.removeEventListener('playing', onPlaying);
+          video.removeEventListener('error', onError);
+          video.removeAttribute('src');
+          video.load();
+          cleanupNativeRef.current = null;
+
+          setupHlsPlayer(video, url);
+          return;
+        }
+
         let msg = 'Failed to load live video stream.';
         if (err.code === MediaError.MEDIA_ERR_NETWORK) {
           msg = 'Network error while loading live stream. Retrying...';
         } else if (err.code === MediaError.MEDIA_ERR_DECODE) {
-          msg = 'Video decoding error on live stream.';
+          msg = 'Video decoding error on live stream (Native player cannot decode broadcast audio/video track).';
         } else if (err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
-          msg = 'Stream format not supported by browser.';
+          msg = 'Stream format not supported by browser native player.';
         }
         setErrorMsg(msg);
         setIsStarting(false);
@@ -115,18 +143,34 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
   };
 
   const setupHlsPlayer = (video: HTMLVideoElement, url: string) => {
+    setPlayerEngine('HLS.js');
     let mediaRecoveryAttempts = 0;
     let lastMediaRecoveryTime = 0;
 
+    const isMobile = isMobileDevice();
+
     const hls = new Hls({
-      enableWorker: true,
+      // WebKit on iOS/iPadOS has worker ArrayBuffer transfer bugs; disable workers on mobile
+      // to also eliminate thread contention on Android.
+      enableWorker: !isMobile,
       lowLatencyMode: false,
-      backBufferLength: 30,
-      maxBufferLength: 15,
-      maxMaxBufferLength: 30,
-      liveSyncDurationCount: 3,
-      liveMaxLatencyDurationCount: 8,
+      backBufferLength: 15,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 60,
+      // 4 segments (12s) buffer cushion on mobile prevents live-edge starvation / still frames
+      liveSyncDurationCount: isMobile ? 4 : 3,
+      liveMaxLatencyDurationCount: 10,
       liveDurationInfinity: true,
+      // Stall watchdog and nudge recovery
+      highBufferWatchdogPeriod: 2,
+      nudgeMaxRetry: 10,
+      nudgeOffset: 0.2,
+      manifestLoadingMaxRetry: 6,
+      manifestLoadingRetryDelay: 1000,
+      levelLoadingMaxRetry: 6,
+      levelLoadingRetryDelay: 1000,
+      fragLoadingMaxRetry: 6,
+      fragLoadingRetryDelay: 1000,
     });
 
     hlsRef.current = hls;
@@ -146,7 +190,7 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
 
     hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
       setIsStarting(false);
-      if (data.details.totalduration) {
+      if (data.details && data.details.totalduration) {
         if (video.buffered.length > 0) {
           const end = video.buffered.end(video.buffered.length - 1);
           setBufferLen(Math.max(0, Number((end - video.currentTime).toFixed(1))));
@@ -181,19 +225,21 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
             mediaRecoveryAttempts++;
 
             if (mediaRecoveryAttempts === 1) {
-              setErrorMsg('Media error detected. Recovering buffer...');
+              // Attempt standard buffer recovery
               hls.recoverMediaError();
             } else if (mediaRecoveryAttempts === 2) {
-              setErrorMsg('Media sync error detected. Adjusting audio codec...');
+              // Attempt audio codec swap
               hls.swapAudioCodec();
               hls.recoverMediaError();
             } else {
-              // If native HLS is supported, fallback to native
-              if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                setErrorMsg('Switching to native browser player...');
+              // If native HLS is supported and fallback not yet attempted, fallback to native
+              const canPlayNative = Boolean(video.canPlayType('application/vnd.apple.mpegurl'));
+              if (canPlayNative && !fallbackAttemptedRef.current.hlsToNative) {
+                console.info('HLS.js fatal media error. Falling back to native player...');
+                fallbackAttemptedRef.current.hlsToNative = true;
+                setErrorMsg(null);
                 hls.destroy();
                 hlsRef.current = null;
-                setPlayerEngine('Native (Fallback)');
                 cleanupNativeRef.current = setupNativePlayer(video, url);
               } else {
                 setErrorMsg('Fatal media error: unable to recover video buffer.');
@@ -211,7 +257,7 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
     });
   };
 
-  const initPlayer = () => {
+  const initPlayer = (forcedEngine?: 'hls' | 'native') => {
     setErrorMsg(null);
     setIsStarting(true);
 
@@ -228,23 +274,33 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
     const video = videoRef.current;
     if (!video) return;
 
-    // Apple mobile devices (iPad, iPhone across Chrome, Safari, Firefox) provide native
-    // AVFoundation HLS playback which handles MPEG-TS seamlessly without MSE buffer errors.
     const canPlayNative = Boolean(video.canPlayType('application/vnd.apple.mpegurl'));
-    const preferNative = isAppleMobileDevice() && canPlayNative;
+    const hlsSupported = Hls.isSupported();
+    setCanSwitchEngine(canPlayNative && hlsSupported);
 
-    if (preferNative) {
-      setPlayerEngine('Native (Apple)');
+    if (forcedEngine === 'native' && canPlayNative) {
       cleanupNativeRef.current = setupNativePlayer(video, playbackUrl);
-    } else if (Hls.isSupported()) {
-      setPlayerEngine('HLS.js');
+    } else if (forcedEngine === 'hls' && hlsSupported) {
+      setupHlsPlayer(video, playbackUrl);
+    } else if (hlsSupported) {
+      // HLS.js uses software demuxing for broadcast audio (MP2, AC3) and MPEG-TS remuxing via MSE.
+      // This works reliably across desktop browsers, Android Chrome, and iPadOS (Chrome/Safari).
       setupHlsPlayer(video, playbackUrl);
     } else if (canPlayNative) {
-      setPlayerEngine('Native');
+      // Native AVPlayer (e.g. iPhone Safari where MSE is disabled)
       cleanupNativeRef.current = setupNativePlayer(video, playbackUrl);
     } else {
       setIsStarting(false);
       setErrorMsg('Your browser does not support HLS video playback.');
+    }
+  };
+
+  const toggleEngine = () => {
+    fallbackAttemptedRef.current = { hlsToNative: false, nativeToHls: false };
+    if (playerEngine === 'HLS.js') {
+      initPlayer('native');
+    } else {
+      initPlayer('hls');
     }
   };
 
@@ -322,7 +378,7 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/80">
@@ -357,13 +413,22 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
         </div>
 
         {/* Video Canvas */}
-        <div className="relative bg-black aspect-video flex items-center justify-center overflow-hidden">
+        <div className="relative bg-black aspect-video flex items-center justify-center">
           <video
             ref={videoRef}
             className="w-full h-full object-contain"
+            style={{
+              transform: 'translateZ(0)',
+              WebkitTransform: 'translateZ(0)',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+              willChange: 'transform',
+            }}
             playsInline
             webkit-playsinline="true"
             x5-playsinline="true"
+            x5-video-player-type="h5-page"
+            preload="auto"
             autoPlay
             onPlay={() => {
               setIsPlaying(true);
@@ -411,7 +476,7 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
             </button>
 
             <button
-              onClick={initPlayer}
+              onClick={() => initPlayer()}
               className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
               title="Reload Stream"
             >
@@ -443,9 +508,18 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
 
           {/* Real-time Diagnostics */}
           <div className="flex items-center space-x-4 text-xs font-mono text-slate-400">
-            <div>
+            <div className="flex items-center space-x-1.5">
               <span className="text-slate-500 text-[10px] uppercase">Engine:</span>{' '}
-              <span className="text-slate-300">{playerEngine}</span>
+              <span className="text-slate-300 font-semibold">{playerEngine}</span>
+              {canSwitchEngine && (
+                <button
+                  onClick={toggleEngine}
+                  className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-indigo-200 border border-slate-700 transition-colors"
+                  title="Switch playback engine between HLS.js and Native"
+                >
+                  Switch to {playerEngine === 'HLS.js' ? 'Native' : 'HLS.js'}
+                </button>
+              )}
             </div>
             <div>
               <span className="text-slate-500 text-[10px] uppercase">Resolution:</span>{' '}

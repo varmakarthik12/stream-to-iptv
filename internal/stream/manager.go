@@ -648,8 +648,10 @@ func buildFFmpegArgs(stream *models.Stream, streamDir string) []string {
 		args = append(args, "-map", fmt.Sprintf("0:p:%s", stream.ProgramID))
 	}
 
-	// Codec copy & timestamp generation/corruption handling
-	args = append(args, "-c", "copy", "-fflags", "+genpts+discardcorrupt")
+	// Codec copy, extradata injection for keyframe segment headers, & timestamp generation/corruption handling.
+	// -bsf:v dump_extra ensures each segment beginning with a keyframe includes SPS/PPS parameter sets,
+	// preventing decode errors (e.g. non-existing PPS 0, MEDIA_ERR_DECODE) on Apple AVPlayer and mobile decoders.
+	args = append(args, "-c", "copy", "-bsf:v", "dump_extra", "-fflags", "+genpts+discardcorrupt")
 
 	// Fast 3-second HLS segmenting for rapid cold-start and low-latency live playback.
 	// temp_file: FFmpeg writes to a temp file then atomically renames to the final .m3u8,

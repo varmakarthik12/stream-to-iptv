@@ -91,6 +91,9 @@ func TestBuildFFmpegArgs_LocalAddrAndProgramID(t *testing.T) {
 	if !strings.Contains(args1Str, "fifo_size=500000") {
 		t.Errorf("Expected args to contain fifo_size=500000, got: %s", args1Str)
 	}
+	if !strings.Contains(args1Str, "-bsf:v dump_extra") {
+		t.Errorf("Expected args to contain -bsf:v dump_extra, got: %s", args1Str)
+	}
 
 	// 2. Fallback to IP_ADDR environment variable when LocalAddr is empty
 	t.Setenv("IP_ADDR", "10.0.0.99")
