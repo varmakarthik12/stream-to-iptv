@@ -212,6 +212,7 @@ func (s *EPGService) GenerateMergedEPG() error {
 	type mappedChannel struct {
 		StreamID          string
 		TVGId             string
+		TVGName           string
 		Name              string
 		LogoURL           string
 		PrimarySourceID   string
@@ -253,6 +254,7 @@ func (s *EPGService) GenerateMergedEPG() error {
 		mc := mappedChannel{
 			StreamID: st.ID,
 			TVGId:    tvgID,
+			TVGName:  st.TVGName,
 			Name:     st.Name,
 			LogoURL:  logoURL,
 		}
@@ -462,6 +464,80 @@ func (s *EPGService) GenerateMergedEPG() error {
 		}
 	}
 
+	// 5. Smart Name-Based Fallback: For channels with 0 programmes, match candidates by name across all sources
+	for _, mc := range mapped {
+		if programmesFound[mc.TVGId] > 0 {
+			continue
+		}
+
+		searchQueries := extractSearchKeywords(mc.Name, mc.TVGName)
+		var candidateChannelIDs []string
+		for _, q := range searchQueries {
+			candidates, err := s.repo.SearchEPGChannels("", q, 10)
+			if err == nil {
+				for _, c := range candidates {
+					if c.ChannelID != mc.PrimaryChannelID && c.ChannelID != mc.TVGId && c.ChannelID != mc.FallbackChannelID {
+						candidateChannelIDs = append(candidateChannelIDs, c.ChannelID)
+					}
+				}
+			}
+			if len(candidateChannelIDs) > 0 {
+				break
+			}
+		}
+
+		if len(candidateChannelIDs) == 0 {
+			continue
+		}
+
+		candidateSet := make(map[string]bool)
+		for _, cid := range candidateChannelIDs {
+			candidateSet[cid] = true
+		}
+
+		for _, srcID := range allSourceIDs {
+			cacheFile := filepath.Join(db.GetEPGDir(), fmt.Sprintf("source_%s.xml", srcID))
+			f, err := os.Open(cacheFile)
+			if err != nil {
+				continue
+			}
+
+			decoder := xml.NewDecoder(f)
+			decoder.Entity = xml.HTMLEntity
+
+			for {
+				t, err := decoder.Token()
+				if err != nil {
+					break
+				}
+				switch se := t.(type) {
+				case xml.StartElement:
+					if se.Name.Local == "programme" {
+						var prog XMLTVProgrammeElement
+						if err := decoder.DecodeElement(&prog, &se); err == nil {
+							var chID string
+							for _, a := range prog.Attrs {
+								if a.Name.Local == "channel" {
+									chID = a.Value
+									break
+								}
+							}
+							if candidateSet[chID] {
+								programmesFound[mc.TVGId]++
+								writeProgrammeElement(outFile, prog, mc.TVGId, mc.LogoURL)
+							}
+						}
+					}
+				}
+			}
+			f.Close()
+			if programmesFound[mc.TVGId] > 0 {
+				logrus.Infof("Smart EPG match: found %d programmes for '%s' (%s) from candidate channel", programmesFound[mc.TVGId], mc.Name, mc.TVGId)
+				break
+			}
+		}
+	}
+
 	outFile.WriteString("</tv>\n")
 	outFile.Sync()
 	outFile.Close()
@@ -549,12 +625,12 @@ func (s *EPGService) worker() {
 		case <-s.stopChan:
 			return
 		case <-ticker.C:
-			s.checkPendingRefreshes()
+			s.CheckPendingRefreshes()
 		}
 	}
 }
 
-func (s *EPGService) checkPendingRefreshes() {
+func (s *EPGService) CheckPendingRefreshes() {
 	sources, err := s.repo.GetAllEPGSources()
 	if err != nil {
 		return
@@ -577,3 +653,45 @@ func (s *EPGService) checkPendingRefreshes() {
 		}
 	}
 }
+
+func extractSearchKeywords(names ...string) []string {
+	var results []string
+	stopWords := map[string]bool{
+		"hd": true, "fhd": true, "4k": true, "tv": true, "channel": true,
+		"hevc": true, "dolby": true, "vision": true, "sun": true, "star": false,
+	}
+
+	seen := make(map[string]bool)
+	for _, n := range names {
+		trimmed := strings.TrimSpace(n)
+		if trimmed == "" || seen[trimmed] {
+			continue
+		}
+		seen[trimmed] = true
+		results = append(results, trimmed)
+
+		parts := strings.Fields(trimmed)
+		var cleanTokens []string
+		for _, p := range parts {
+			clean := strings.ToLower(strings.Trim(p, "()[]-.,/"))
+			if !stopWords[clean] && len(clean) > 1 {
+				cleanTokens = append(cleanTokens, p)
+			}
+		}
+		if len(cleanTokens) > 0 {
+			cleanPhrase := strings.Join(cleanTokens, " ")
+			if !seen[cleanPhrase] {
+				seen[cleanPhrase] = true
+				results = append(results, cleanPhrase)
+			}
+			for _, token := range cleanTokens {
+				if !seen[token] {
+					seen[token] = true
+					results = append(results, token)
+				}
+			}
+		}
+	}
+	return results
+}
+

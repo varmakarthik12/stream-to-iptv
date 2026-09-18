@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -44,7 +45,19 @@ func RegisterRoutes(
 	}))
 
 	// IPTV Public Endpoints
-	r.Get("/playlist.m3u", func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("/playlist.m3u", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		if req.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if req.Method != http.MethodGet && req.Method != http.MethodHead {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
 		token := req.URL.Query().Get("token")
 		scheme := "http"
 		if req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https" {
@@ -55,27 +68,55 @@ func RegisterRoutes(
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Content-Type", "application/x-mpegURL")
+		w.Header().Set("Content-Type", "application/x-mpegURL; charset=utf-8")
+		if req.Method == http.MethodHead {
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(m3uContent)))
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		w.Write([]byte(m3uContent))
 	})
 
-	r.Get("/epg.xml", func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("/epg.xml", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		if req.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if req.Method != http.MethodGet && req.Method != http.MethodHead {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
 		epgPath := filepath.Join(db.GetEPGDir(), "generated_epg.xml")
-		if fi, err := os.Stat(epgPath); os.IsNotExist(err) || fi.Size() == 0 {
+		fi, err := os.Stat(epgPath)
+		if os.IsNotExist(err) || (err == nil && (fi.Size() == 0 || req.URL.Query().Get("refresh") == "true" || time.Since(fi.ModTime()) > 4*time.Hour)) {
 			_ = epgService.GenerateMergedEPG()
 		}
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 		http.ServeFile(w, req, epgPath)
 	})
 
-	r.Get("/epg.xml.gz", func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("/epg.xml.gz", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		if req.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if req.Method != http.MethodGet && req.Method != http.MethodHead {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
 		epgGzPath := filepath.Join(db.GetEPGDir(), "generated_epg.xml.gz")
-		if fi, err := os.Stat(epgGzPath); os.IsNotExist(err) || fi.Size() == 0 {
+		fi, err := os.Stat(epgGzPath)
+		if os.IsNotExist(err) || (err == nil && (fi.Size() == 0 || req.URL.Query().Get("refresh") == "true" || time.Since(fi.ModTime()) > 4*time.Hour)) {
 			_ = epgService.GenerateMergedEPG()
 		}
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/x-gzip")
 		http.ServeFile(w, req, epgGzPath)
 	})

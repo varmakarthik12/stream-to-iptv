@@ -64,6 +64,7 @@ func main() {
 	streamMgr := stream.NewManager(repo)
 	epgService := iptv.NewEPGService(repo)
 	defer epgService.Stop()
+	go epgService.CheckPendingRefreshes()
 
 	m3uService := iptv.NewM3UService(repo)
 

@@ -213,3 +213,90 @@ func TestGenerateMergedEPGRichMetadataAndFallback(t *testing.T) {
 		t.Errorf("Gzip uncompressed size %d != file size %d", len(gzContent), len(content))
 	}
 }
+
+func TestSmartNameBasedFallback(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "test-smart-epg-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	database, err := db.InitDB(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to init DB: %v", err)
+	}
+	defer database.Close()
+
+	repo := repository.NewRepository(database)
+	s := NewEPGService(repo)
+	defer s.Stop()
+
+	// 1. Create EPG Source
+	src, err := repo.CreateEPGSource("Test Guide", "http://example.com/epg.xml", 24)
+	if err != nil {
+		t.Fatalf("Failed to create EPG source: %v", err)
+	}
+
+	// Mock source channels in repository
+	_ = repo.SaveEPGChannels(src.ID, []models.EPGChannel{
+		{ChannelID: "sun194392", DisplayName: "Gemini TV HD"},
+		{ChannelID: "897", DisplayName: "Sun Gemini HD"}, // 0 programmes in XML
+	})
+
+	// Write mock XML where '897' has 0 programmes, but 'sun194392' has programmes
+	epgDir := db.GetEPGDir()
+	sourceCachePath := filepath.Join(epgDir, fmt.Sprintf("source_%s.xml", src.ID))
+	mockXML := `<?xml version="1.0" encoding="UTF-8"?>
+<tv>
+  <channel id="897">
+    <display-name>Sun Gemini HD</display-name>
+  </channel>
+  <channel id="sun194392">
+    <display-name>Gemini TV HD</display-name>
+  </channel>
+  <programme start="20260918120000 +0000" stop="20260918130000 +0000" channel="sun194392">
+    <title>Gemini Blockbuster Show</title>
+  </programme>
+</tv>`
+	if err := os.WriteFile(sourceCachePath, []byte(mockXML), 0644); err != nil {
+		t.Fatalf("Failed to write mock cache file: %v", err)
+	}
+
+	// Create stream with TVGId="897" and Name="Sun Gemini HD"
+	st := &models.Stream{
+		Name:     "Sun Gemini HD",
+		Slug:     "sun-gemini-hd",
+		MediaURL: "http://example.com/gemini.m3u8",
+		TVGId:    "897",
+		TVGName:  "Sun Gemini HD",
+		Enabled:  true,
+		EPGMapping: &models.StreamEPGMapping{
+			PrimaryEPGSourceID: src.ID,
+			PrimaryChannelID:   "897",
+		},
+	}
+	_, err = repo.CreateStream(st)
+	if err != nil {
+		t.Fatalf("Failed to create stream: %v", err)
+	}
+
+	// Generate merged EPG
+	if err := s.GenerateMergedEPG(); err != nil {
+		t.Fatalf("GenerateMergedEPG failed: %v", err)
+	}
+
+	generatedPath := filepath.Join(epgDir, "generated_epg.xml")
+	content, err := os.ReadFile(generatedPath)
+	if err != nil {
+		t.Fatalf("Failed to read generated_epg.xml: %v", err)
+	}
+	xmlStr := string(content)
+
+	if !strings.Contains(xmlStr, `channel="897"`) {
+		t.Errorf("Smart fallback should have mapped programmes to channel 897, got:\n%s", xmlStr)
+	}
+	if !strings.Contains(xmlStr, `Gemini Blockbuster Show`) {
+		t.Errorf("Missing programme title from smart fallback channel")
+	}
+}
+
