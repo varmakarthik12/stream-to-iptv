@@ -30,9 +30,21 @@ interface StreamPlayerModalProps {
   onClose: () => void;
 }
 
+const isAppleMobileDevice = (): boolean => {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua);
+  const isIPadOS =
+    (navigator.platform === 'MacIntel' || /Macintosh/.test(ua)) &&
+    (navigator.maxTouchPoints > 1 || (navigator as any).standalone !== undefined);
+  const isIOSBrowser = /CriOS|FxiOS|EdgiOS/.test(ua);
+  return isIOS || isIPadOS || isIOSBrowser;
+};
+
 export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, onClose }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const cleanupNativeRef = useRef<(() => void) | null>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -41,14 +53,172 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
   const [bufferLen, setBufferLen] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState<boolean>(false);
+  const [playerEngine, setPlayerEngine] = useState<string>('Auto');
 
   const playbackUrl =
     stream.playback_url ||
     `${window.location.origin}/stream/${stream.slug}/${stream.slug}.m3u8`;
 
+  const setupNativePlayer = (video: HTMLVideoElement, url: string): (() => void) => {
+    video.src = url;
+    video.load();
+
+    const onLoadedMetadata = () => {
+      setIsStarting(false);
+      setErrorMsg(null);
+      if (video.videoWidth && video.videoHeight) {
+        setResolution(`${video.videoWidth}x${video.videoHeight}`);
+      }
+      video.play().catch(() => {
+        // Mobile / iOS autoplay policy requires mute first
+        video.muted = true;
+        setIsMuted(true);
+        video.play().catch((err) => {
+          console.warn('Muted autoplay also failed:', err);
+        });
+      });
+    };
+
+    const onPlaying = () => {
+      setIsStarting(false);
+      setIsPlaying(true);
+      setErrorMsg(null);
+    };
+
+    const onError = () => {
+      const err = video.error;
+      if (err && err.code !== MediaError.MEDIA_ERR_ABORTED) {
+        let msg = 'Failed to load live video stream.';
+        if (err.code === MediaError.MEDIA_ERR_NETWORK) {
+          msg = 'Network error while loading live stream. Retrying...';
+        } else if (err.code === MediaError.MEDIA_ERR_DECODE) {
+          msg = 'Video decoding error on live stream.';
+        } else if (err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+          msg = 'Stream format not supported by browser.';
+        }
+        setErrorMsg(msg);
+        setIsStarting(false);
+      }
+    };
+
+    video.addEventListener('loadedmetadata', onLoadedMetadata);
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('error', onError);
+
+    return () => {
+      video.removeEventListener('loadedmetadata', onLoadedMetadata);
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('error', onError);
+      video.removeAttribute('src');
+      video.load();
+    };
+  };
+
+  const setupHlsPlayer = (video: HTMLVideoElement, url: string) => {
+    let mediaRecoveryAttempts = 0;
+    let lastMediaRecoveryTime = 0;
+
+    const hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+      backBufferLength: 30,
+      maxBufferLength: 15,
+      maxMaxBufferLength: 30,
+      liveSyncDurationCount: 3,
+      liveMaxLatencyDurationCount: 8,
+      liveDurationInfinity: true,
+    });
+
+    hlsRef.current = hls;
+
+    hls.loadSource(url);
+    hls.attachMedia(video);
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      setIsStarting(false);
+      setErrorMsg(null);
+      video.play().catch(() => {
+        video.muted = true;
+        setIsMuted(true);
+        video.play().catch(() => {});
+      });
+    });
+
+    hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
+      setIsStarting(false);
+      if (data.details.totalduration) {
+        if (video.buffered.length > 0) {
+          const end = video.buffered.end(video.buffered.length - 1);
+          setBufferLen(Math.max(0, Number((end - video.currentTime).toFixed(1))));
+        }
+      }
+    });
+
+    hls.on(Hls.Events.FRAG_BUFFERED, () => {
+      setErrorMsg(null);
+      mediaRecoveryAttempts = 0;
+    });
+
+    hls.on(Hls.Events.FRAG_CHANGED, () => {
+      if (video.videoWidth && video.videoHeight) {
+        setResolution(`${video.videoWidth}x${video.videoHeight}`);
+      }
+    });
+
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal) {
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            setErrorMsg('Network error encountered while loading live stream. Retrying...');
+            hls.startLoad();
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR: {
+            const now = Date.now();
+            if (now - lastMediaRecoveryTime > 15000) {
+              mediaRecoveryAttempts = 0;
+            }
+            lastMediaRecoveryTime = now;
+            mediaRecoveryAttempts++;
+
+            if (mediaRecoveryAttempts === 1) {
+              setErrorMsg('Media error detected. Recovering buffer...');
+              hls.recoverMediaError();
+            } else if (mediaRecoveryAttempts === 2) {
+              setErrorMsg('Media sync error detected. Adjusting audio codec...');
+              hls.swapAudioCodec();
+              hls.recoverMediaError();
+            } else {
+              // If native HLS is supported, fallback to native
+              if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                setErrorMsg('Switching to native browser player...');
+                hls.destroy();
+                hlsRef.current = null;
+                setPlayerEngine('Native (Fallback)');
+                cleanupNativeRef.current = setupNativePlayer(video, url);
+              } else {
+                setErrorMsg('Fatal media error: unable to recover video buffer.');
+                hls.destroy();
+              }
+            }
+            break;
+          }
+          default:
+            setErrorMsg(`Streaming error: ${data.details || 'unknown'}`);
+            hls.destroy();
+            break;
+        }
+      }
+    });
+  };
+
   const initPlayer = () => {
     setErrorMsg(null);
     setIsStarting(true);
+
+    if (cleanupNativeRef.current) {
+      cleanupNativeRef.current();
+      cleanupNativeRef.current = null;
+    }
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -58,78 +228,22 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
     const video = videoRef.current;
     if (!video) return;
 
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 30,
-        maxBufferLength: 10,
-        maxMaxBufferLength: 20,
-        liveSyncDurationCount: 2,
-        liveMaxLatencyDurationCount: 5,
-      });
+    // Apple mobile devices (iPad, iPhone across Chrome, Safari, Firefox) provide native
+    // AVFoundation HLS playback which handles MPEG-TS seamlessly without MSE buffer errors.
+    const canPlayNative = Boolean(video.canPlayType('application/vnd.apple.mpegurl'));
+    const preferNative = isAppleMobileDevice() && canPlayNative;
 
-      hlsRef.current = hls;
-
-      hls.loadSource(playbackUrl);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        setIsStarting(false);
-        video.play().catch(() => {
-          // Autoplay policy might require mute
-          video.muted = true;
-          setIsMuted(true);
-          video.play().catch(() => {});
-        });
-      });
-
-      hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
-        setIsStarting(false);
-        if (data.details.totalduration) {
-          // Track live buffer
-          if (video.buffered.length > 0) {
-            const end = video.buffered.end(video.buffered.length - 1);
-            setBufferLen(Math.max(0, Number((end - video.currentTime).toFixed(1))));
-          }
-        }
-      });
-
-      hls.on(Hls.Events.FRAG_CHANGED, () => {
-        if (video.videoWidth && video.videoHeight) {
-          setResolution(`${video.videoWidth}x${video.videoHeight}`);
-        }
-      });
-
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              setErrorMsg('Network error encountered while loading live stream. Retrying...');
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              setErrorMsg('Media error detected. Recovering buffer...');
-              hls.recoverMediaError();
-              break;
-            default:
-              setErrorMsg(`Fatal streaming error: ${data.details || 'unknown'}`);
-              hls.destroy();
-              break;
-          }
-        }
-      });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native Safari HLS
-      video.src = playbackUrl;
-      video.addEventListener('loadedmetadata', () => {
-        setIsStarting(false);
-        if (video.videoWidth && video.videoHeight) {
-          setResolution(`${video.videoWidth}x${video.videoHeight}`);
-        }
-        video.play().catch(() => {});
-      });
+    if (preferNative) {
+      setPlayerEngine('Native (Apple)');
+      cleanupNativeRef.current = setupNativePlayer(video, playbackUrl);
+    } else if (Hls.isSupported()) {
+      setPlayerEngine('HLS.js');
+      setupHlsPlayer(video, playbackUrl);
+    } else if (canPlayNative) {
+      setPlayerEngine('Native');
+      cleanupNativeRef.current = setupNativePlayer(video, playbackUrl);
     } else {
+      setIsStarting(false);
       setErrorMsg('Your browser does not support HLS video playback.');
     }
   };
@@ -150,6 +264,10 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
 
     return () => {
       clearInterval(interval);
+      if (cleanupNativeRef.current) {
+        cleanupNativeRef.current();
+        cleanupNativeRef.current = null;
+      }
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -191,9 +309,15 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
     const video = videoRef.current;
     if (!video) return;
     if (!document.fullscreenElement) {
-      video.requestFullscreen().catch(() => {});
+      if (video.requestFullscreen) {
+        video.requestFullscreen().catch(() => {});
+      } else if ((video as any).webkitEnterFullscreen) {
+        (video as any).webkitEnterFullscreen();
+      }
     } else {
-      document.exitFullscreen().catch(() => {});
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
     }
   };
 
@@ -238,8 +362,19 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
             ref={videoRef}
             className="w-full h-full object-contain"
             playsInline
+            webkit-playsinline="true"
+            x5-playsinline="true"
             autoPlay
-            onPlay={() => setIsPlaying(true)}
+            onPlay={() => {
+              setIsPlaying(true);
+              setIsStarting(false);
+              setErrorMsg(null);
+            }}
+            onPlaying={() => {
+              setIsPlaying(true);
+              setIsStarting(false);
+              setErrorMsg(null);
+            }}
             onPause={() => setIsPlaying(false)}
           />
 
@@ -309,8 +444,8 @@ export const StreamPlayerModal: React.FC<StreamPlayerModalProps> = ({ stream, on
           {/* Real-time Diagnostics */}
           <div className="flex items-center space-x-4 text-xs font-mono text-slate-400">
             <div>
-              <span className="text-slate-500 text-[10px] uppercase">Format:</span>{' '}
-              <span className="text-slate-300">HLS (MPEG-TS)</span>
+              <span className="text-slate-500 text-[10px] uppercase">Engine:</span>{' '}
+              <span className="text-slate-300">{playerEngine}</span>
             </div>
             <div>
               <span className="text-slate-500 text-[10px] uppercase">Resolution:</span>{' '}
