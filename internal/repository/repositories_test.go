@@ -69,6 +69,8 @@ func TestCategoriesAndStreamRepository(t *testing.T) {
 		TVGId:             "espn.us",
 		ProgramID:         "101",
 		LocalAddr:         "192.168.1.55",
+		AnalyzeDuration:   "4000000",
+		ProbeSize:         "8000000",
 		Mode:              "ondemand",
 		IdleTimeoutSec:    120,
 		AutoRecover:       true,
@@ -91,7 +93,7 @@ func TestCategoriesAndStreamRepository(t *testing.T) {
 		t.Fatalf("Failed to fetch stream: %v", err)
 	}
 
-	if fetched.Name != "Test ESPN" || !fetched.AutoRecover || fetched.RecoverTimeoutSec != 25 || fetched.LocalAddr != "192.168.1.55" || fetched.ProgramID != "101" {
+	if fetched.Name != "Test ESPN" || !fetched.AutoRecover || fetched.RecoverTimeoutSec != 25 || fetched.LocalAddr != "192.168.1.55" || fetched.ProgramID != "101" || fetched.AnalyzeDuration != "4000000" || fetched.ProbeSize != "8000000" {
 		t.Errorf("Stream data mismatch: %+v", fetched)
 	}
 
@@ -99,8 +101,10 @@ func TestCategoriesAndStreamRepository(t *testing.T) {
 		t.Errorf("Expected category 'Sports' to be mapped, got %+v", fetched.Categories)
 	}
 
-	// Test updating LocalAddr
+	// Test updating LocalAddr, AnalyzeDuration, ProbeSize
 	fetched.LocalAddr = "10.0.0.42"
+	fetched.AnalyzeDuration = "6000000"
+	fetched.ProbeSize = "12000000"
 	if err := repo.UpdateStream(fetched); err != nil {
 		t.Fatalf("Failed to update stream: %v", err)
 	}
@@ -111,5 +115,11 @@ func TestCategoriesAndStreamRepository(t *testing.T) {
 	}
 	if updated.LocalAddr != "10.0.0.42" {
 		t.Errorf("Expected updated LocalAddr '10.0.0.42', got '%s'", updated.LocalAddr)
+	}
+	if updated.AnalyzeDuration != "6000000" {
+		t.Errorf("Expected updated AnalyzeDuration '6000000', got '%s'", updated.AnalyzeDuration)
+	}
+	if updated.ProbeSize != "12000000" {
+		t.Errorf("Expected updated ProbeSize '12000000', got '%s'", updated.ProbeSize)
 	}
 }

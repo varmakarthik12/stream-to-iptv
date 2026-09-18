@@ -31,6 +31,8 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
   const [fifoSize, setFifoSize] = useState(stream?.fifo_size || '');
   const [programId, setProgramId] = useState(stream?.program_id || '1');
   const [localAddr, setLocalAddr] = useState(stream?.local_addr || '');
+  const [analyzeDuration, setAnalyzeDuration] = useState(stream?.analyze_duration || '');
+  const [probeSize, setProbeSize] = useState(stream?.probe_size || '');
   const [useGpu, setUseGpu] = useState(stream ? stream.use_gpu : false);
   const [overrunNonfatal, setOverrunNonfatal] = useState(stream ? stream.overrun_nonfatal : false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -219,6 +221,8 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
         fifo_size: fifoSize.trim(),
         program_id: programId.trim(),
         local_addr: localAddr.trim(),
+        analyze_duration: analyzeDuration.trim(),
+        probe_size: probeSize.trim(),
         use_gpu: useGpu,
         overrun_nonfatal: overrunNonfatal,
         logo_id: finalLogoId,
@@ -906,6 +910,32 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">
                     Ring buffer size for UDP streams. Defaults to 1000000.
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Analyze Duration (µs)</label>
+                  <input
+                    type="text"
+                    value={analyzeDuration}
+                    onChange={(e) => setAnalyzeDuration(e.target.value)}
+                    placeholder="Auto (2000000 SPTS / 5000000 MPTS)"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Analysis time in microseconds (-analyzeduration). Defaults to 2s (5s for MPTS).
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Probe Size (bytes)</label>
+                  <input
+                    type="text"
+                    value={probeSize}
+                    onChange={(e) => setProbeSize(e.target.value)}
+                    placeholder="Auto (2000000 SPTS / 10000000 MPTS)"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Input probe buffer in bytes (-probesize). Defaults to 2MB (10MB for MPTS).
                   </span>
                 </div>
                 <div className="sm:col-span-2 flex items-center space-x-6 pt-2">

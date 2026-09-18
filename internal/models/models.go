@@ -80,6 +80,8 @@ type Stream struct {
 	RecoverTimeoutSec int              `json:"recover_timeout_sec"`
 	BufferSize       string            `json:"buffer_size"`
 	FifoSize         string            `json:"fifo_size"`
+	AnalyzeDuration  string            `json:"analyze_duration"`
+	ProbeSize        string            `json:"probe_size"`
 	UseGPU           bool              `json:"use_gpu"`
 	OverrunNonfatal  bool              `json:"overrun_nonfatal"`
 	Enabled          bool              `json:"enabled"`

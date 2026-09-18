@@ -129,3 +129,42 @@ func TestBuildFFmpegArgs_LocalAddrAndProgramID(t *testing.T) {
 	}
 }
 
+func TestBuildFFmpegArgs_ProbingSettings(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// 1. Standard SPTS stream without ProgramID -> fast defaults (2000000 / 2000000)
+	sptsStream := &models.Stream{
+		Slug:     "spts-stream",
+		MediaURL: "http://example.com/live.m3u8",
+	}
+	sptsArgs := strings.Join(buildFFmpegArgs(sptsStream, tempDir), " ")
+	if !strings.Contains(sptsArgs, "-analyzeduration 2000000 -probesize 2000000") {
+		t.Errorf("Expected SPTS stream to default to 2000000/2000000, got: %s", sptsArgs)
+	}
+
+	// 2. MPTS stream with ProgramID -> auto-scaled defaults (5000000 / 10000000)
+	mptsStream := &models.Stream{
+		Slug:      "mpts-stream",
+		MediaURL:  "udp://239.239.10.3:5555",
+		ProgramID: "10303",
+	}
+	mptsArgs := strings.Join(buildFFmpegArgs(mptsStream, tempDir), " ")
+	if !strings.Contains(mptsArgs, "-analyzeduration 5000000 -probesize 10000000") {
+		t.Errorf("Expected MPTS stream to auto-scale to 5000000/10000000, got: %s", mptsArgs)
+	}
+
+	// 3. Stream with explicit custom overrides -> overrides defaults
+	customStream := &models.Stream{
+		Slug:            "custom-stream",
+		MediaURL:        "udp://239.239.10.3:5555",
+		ProgramID:       "10303",
+		AnalyzeDuration: "8000000",
+		ProbeSize:       "16000000",
+	}
+	customArgs := strings.Join(buildFFmpegArgs(customStream, tempDir), " ")
+	if !strings.Contains(customArgs, "-analyzeduration 8000000 -probesize 16000000") {
+		t.Errorf("Expected custom overrides to take precedence, got: %s", customArgs)
+	}
+}
+
+

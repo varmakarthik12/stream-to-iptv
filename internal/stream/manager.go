@@ -611,8 +611,25 @@ func buildFFmpegArgs(stream *models.Stream, streamDir string) []string {
 	// Global / input options
 	args = append(args, "-hide_banner", "-loglevel", "warning")
 
-	// Fast probing for live streams (prevents long stalls and missing SPS/PPS issues)
-	args = append(args, "-analyzeduration", "2000000", "-probesize", "2000000")
+	// Probing settings:
+	// Default to 2000000 (2s / 2MB) for single-channel SPTS streams for rapid cold-start.
+	// For MPTS multi-channel streams (ProgramID != "" && ProgramID != "0"), auto-scale default to
+	// 5000000 (5s) and 10000000 (10MB) to allow multiplexed channels time to emit SPS/PPS.
+	// Explicit stream settings (AnalyzeDuration / ProbeSize) override defaults.
+	analyzeDuration := "2000000"
+	probeSize := "2000000"
+	if stream.ProgramID != "" && stream.ProgramID != "0" {
+		analyzeDuration = "5000000"
+		probeSize = "10000000"
+	}
+	if customAnalyze := strings.TrimSpace(stream.AnalyzeDuration); customAnalyze != "" {
+		analyzeDuration = customAnalyze
+	}
+	if customProbe := strings.TrimSpace(stream.ProbeSize); customProbe != "" {
+		probeSize = customProbe
+	}
+
+	args = append(args, "-analyzeduration", analyzeDuration, "-probesize", probeSize)
 
 	// Socket buffer size before -i for protocols that read it via command line
 	if isUDP && !strings.Contains(input, "buffer_size=") {
