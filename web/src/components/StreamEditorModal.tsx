@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Upload, Search, Film, Layers, Calendar, Image as ImageIcon, Cpu, AlertCircle } from 'lucide-react';
 import { api, Stream, Category, Logo, EPGSource, EPGChannel } from '../api';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface StreamEditorModalProps {
   stream?: Stream | null;
@@ -158,8 +159,9 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
   const currentSlug = slug || 'channel-slug';
   const autoPlaybackUrl = `${serverBase}/stream/${currentSlug}/${currentSlug}.m3u8`;
 
-  const copyPlaybackUrl = () => {
-    navigator.clipboard.writeText(autoPlaybackUrl);
+  const copyPlaybackUrl = async () => {
+    if (!autoPlaybackUrl) return;
+    await copyToClipboard(autoPlaybackUrl);
     setCopiedUrl(true);
     setTimeout(() => setCopiedUrl(false), 2000);
   };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Image as ImageIcon, Upload, Globe, Copy, Check, Trash2, Plus, AlertCircle } from 'lucide-react';
 import { api, Logo } from '../api';
+import { copyToClipboard } from '../utils/clipboard';
 
 export const Logos: React.FC = () => {
   const [logos, setLogos] = useState<Logo[]>([]);
@@ -84,8 +85,8 @@ export const Logos: React.FC = () => {
     }
   };
 
-  const copyLogoUrl = (l: Logo) => {
-    navigator.clipboard.writeText(l.url);
+  const copyLogoUrl = async (l: Logo) => {
+    await copyToClipboard(l.url);
     setCopiedId(l.id);
     setTimeout(() => setCopiedId(null), 2000);
   };

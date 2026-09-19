@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Terminal, RefreshCw, X, Copy, Check } from 'lucide-react';
 import { api, Stream, StreamLogEntry } from '../api';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface StreamLogsModalProps {
   stream: Stream;
@@ -36,9 +37,9 @@ export const StreamLogsModal: React.FC<StreamLogsModalProps> = ({ stream, onClos
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  const copyLogs = () => {
+  const copyLogs = async () => {
     const text = logs.map((l) => `[${new Date(l.timestamp).toLocaleTimeString()}] ${l.message}`).join('\n');
-    navigator.clipboard.writeText(text);
+    await copyToClipboard(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

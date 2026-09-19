@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Save, Server, Shield, HardDrive, Check, Copy, AlertCircle, RefreshCw, Terminal } from 'lucide-react';
 import { api, SystemStatus } from '../api';
+import { copyToClipboard } from '../utils/clipboard';
 
 export const Settings: React.FC = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -60,8 +61,8 @@ export const Settings: React.FC = () => {
   --restart unless-stopped \\
   ghcr.io/varmakarthik12/stream-to-iptv:latest`;
 
-  const copyDockerCmd = () => {
-    navigator.clipboard.writeText(dockerCommand);
+  const copyDockerCmd = async () => {
+    await copyToClipboard(dockerCommand);
     setCopiedDocker(true);
     setTimeout(() => setCopiedDocker(false), 2000);
   };

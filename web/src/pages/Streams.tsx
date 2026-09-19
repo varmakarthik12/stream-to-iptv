@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Play, Square, Terminal, Edit, Trash2, Copy, Check, Radio, Tv, Layers, ExternalLink, RefreshCw, MonitorPlay } from 'lucide-react';
 import { api, Stream, Category } from '../api';
+import { copyToClipboard } from '../utils/clipboard';
 import { IPTVBanner } from '../components/IPTVBanner';
 import { StreamEditorModal } from '../components/StreamEditorModal';
 import { StreamLogsModal } from '../components/StreamLogsModal';
@@ -101,9 +102,9 @@ export const Streams: React.FC = () => {
     }
   };
 
-  const copyPlaybackUrl = (st: Stream) => {
+  const copyPlaybackUrl = async (st: Stream) => {
     const url = st.playback_url || `${window.location.origin}/stream/${st.slug}/${st.slug}.m3u8`;
-    navigator.clipboard.writeText(url);
+    await copyToClipboard(url);
     setCopiedId(st.id);
     setTimeout(() => setCopiedId(null), 2000);
   };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Plus, RefreshCw, Trash2, Edit, CheckCircle2, AlertCircle, Copy, Check, Clock, Radio } from 'lucide-react';
 import { api, EPGSource, SystemStatus } from '../api';
+import { copyToClipboard } from '../utils/clipboard';
 
 export const EPG: React.FC = () => {
   const [sources, setSources] = useState<EPGSource[]>([]);
@@ -171,8 +172,8 @@ export const EPG: React.FC = () => {
   const epgXmlUrl = `${serverBase}/epg.xml`;
   const epgGzUrl = `${serverBase}/epg.xml.gz`;
 
-  const copyUrl = (u: string, type: 'xml' | 'gz') => {
-    navigator.clipboard.writeText(u);
+  const copyUrl = async (u: string, type: 'xml' | 'gz') => {
+    await copyToClipboard(u);
     if (type === 'xml') {
       setCopiedXml(true);
       setTimeout(() => setCopiedXml(false), 2000);

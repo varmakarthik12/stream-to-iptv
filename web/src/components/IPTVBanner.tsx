@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Copy, Check, Info, Radio, ExternalLink, HelpCircle } from 'lucide-react';
 import { api, SystemStatus } from '../api';
+import { copyToClipboard } from '../utils/clipboard';
 
 export const IPTVBanner: React.FC = () => {
   const [status, setStatus] = useState<SystemStatus | null>(null);
@@ -21,8 +22,8 @@ export const IPTVBanner: React.FC = () => {
     }
   };
 
-  const copyToClipboard = (text: string, type: 'm3u' | 'epg') => {
-    navigator.clipboard.writeText(text);
+  const handleCopy = async (text: string, type: 'm3u' | 'epg') => {
+    await copyToClipboard(text);
     if (type === 'm3u') {
       setCopiedM3U(true);
       setTimeout(() => setCopiedM3U(false), 2000);
@@ -59,7 +60,7 @@ export const IPTVBanner: React.FC = () => {
               {status.playlist_url}
             </span>
             <button
-              onClick={() => copyToClipboard(status.playlist_url, 'm3u')}
+              onClick={() => handleCopy(status.playlist_url, 'm3u')}
               className="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1.5 rounded-md font-medium transition-colors"
             >
               {copiedM3U ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -74,7 +75,7 @@ export const IPTVBanner: React.FC = () => {
               {status.epg_url}
             </span>
             <button
-              onClick={() => copyToClipboard(status.epg_url, 'epg')}
+              onClick={() => handleCopy(status.epg_url, 'epg')}
               className="flex items-center space-x-1 bg-purple-600 hover:bg-purple-500 text-white px-2.5 py-1.5 rounded-md font-medium transition-colors"
             >
               {copiedEPG ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
