@@ -6,8 +6,11 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"stream-to-iptv/internal/db"
 	"stream-to-iptv/internal/models"
+	"stream-to-iptv/internal/repository"
 )
 
 func TestResolveSystemFFmpeg(t *testing.T) {
@@ -226,6 +229,82 @@ func TestStreamLifecycle_ErrorTrackingAndRestart(t *testing.T) {
 		t.Errorf("Expected status to become 'starting', got: %s", mgr.GetStreamStatus(stream.Slug))
 	}
 }
+
+func TestOnDemandStream_IdleAndAutoRecover(t *testing.T) {
+	tempDir := t.TempDir()
+	database, err := db.InitDB(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to init DB: %v", err)
+	}
+	defer database.Close()
+
+	repo := repository.NewRepository(database)
+	mgr := NewManager(repo)
+
+	// Create on-demand stream
+	stream := &models.Stream{
+		Name:              "OnDemand Channel",
+		Slug:              "ondemand-ch",
+		MediaURL:          "udp://239.239.10.1:5555",
+		Mode:              "ondemand",
+		IdleTimeoutSec:    180,
+		AutoRecover:       true,
+		RecoverTimeoutSec: 30,
+		Enabled:           true,
+	}
+	if _, err := repo.CreateStream(stream); err != nil {
+		t.Fatalf("Failed to create stream: %v", err)
+	}
+
+	state := mgr.getOrCreateState(stream)
+
+	// Scenario 1: Stream has been in error, but user stopped watching (> 180s inactive).
+	// Auto-recovery MUST NOT restart it; it should transition cleanly to 'idle'.
+	state.mu.Lock()
+	state.Status = "error"
+	state.ErrorStartedAt = time.Now().Add(-60 * time.Second)
+	state.LastActivity = time.Now().Add(-200 * time.Second) // 200s ago (> 180s)
+	state.mu.Unlock()
+
+	mgr.checkAutoRecover()
+
+	state.mu.RLock()
+	statusAfterIdle := state.Status
+	state.mu.RUnlock()
+
+	if statusAfterIdle == "starting" || statusAfterIdle == "running" {
+		t.Errorf("Expected on-demand stream with inactive viewers to NOT restart, got status: %s", statusAfterIdle)
+	}
+	if statusAfterIdle != "idle" {
+		t.Errorf("Expected on-demand stream to transition to 'idle', got: %s", statusAfterIdle)
+	}
+
+	// Scenario 2: Stream is stopped intentionally via StopStream
+	// Ensure StopStream leaves it in 'stopped' without lingering error timestamp
+	state.mu.Lock()
+	state.Status = "running"
+	state.Pid = 99999
+	state.mu.Unlock()
+
+	mgr.StopStream(stream.Slug)
+
+	state.mu.RLock()
+	stoppedStatus := state.Status
+	errStarted := state.ErrorStartedAt
+	errMsg := state.ErrorMessage
+	state.mu.RUnlock()
+
+	if stoppedStatus != "stopped" {
+		t.Errorf("Expected status to be 'stopped', got: %s", stoppedStatus)
+	}
+	if !errStarted.IsZero() {
+		t.Errorf("Expected ErrorStartedAt to be zero after StopStream, got: %v", errStarted)
+	}
+	if errMsg != "" {
+		t.Errorf("Expected ErrorMessage to be empty after StopStream, got: %s", errMsg)
+	}
+}
+
 
 
 

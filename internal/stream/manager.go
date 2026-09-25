@@ -405,6 +405,8 @@ func (m *Manager) StopStream(slug string) {
 	}
 	state.Pid = 0
 	state.Status = "stopped"
+	state.ErrorStartedAt = time.Time{}
+	state.ErrorMessage = ""
 	state.ColdStarting = false
 	state.TransitionUntil = time.Time{}
 	state.mu.Unlock()
@@ -527,15 +529,19 @@ func (m *Manager) runFFmpegLoop(ctx context.Context, stream *models.Stream, stat
 
 		state.mu.Lock()
 		state.Pid = 0
+		wasStopped := state.Status == "stopped" || ctx.Err() != nil
 		state.mu.Unlock()
 
-		select {
-		case <-ctx.Done():
+		if wasStopped {
 			state.mu.Lock()
-			state.Status = "idle"
+			if state.Status != "stopped" {
+				state.Status = "idle"
+			}
+			state.ErrorStartedAt = time.Time{}
+			state.ErrorMessage = ""
 			state.mu.Unlock()
+			state.AddLog("Stream process stopped")
 			return
-		default:
 		}
 
 		state.mu.Lock()
@@ -742,7 +748,26 @@ func (m *Manager) checkAutoRecover() {
 			state.mu.RLock()
 			durationInError := time.Since(state.ErrorStartedAt)
 			isErr := state.Status == "error"
+			lastActivity := state.LastActivity
 			state.mu.RUnlock()
+
+			// For on-demand streams, only auto-recover if there has been active viewer interest
+			// within the idle timeout window. If the stream has exceeded its idle timeout,
+			// it is considered idle with no active viewers: transition to idle and do not restart.
+			if stream.Mode != "always_on" {
+				idleTimeoutSec := stream.IdleTimeoutSec
+				if idleTimeoutSec <= 0 {
+					idleTimeoutSec = 180
+				}
+				if time.Since(lastActivity) >= time.Duration(idleTimeoutSec)*time.Second {
+					state.mu.Lock()
+					state.Status = "idle"
+					state.ErrorStartedAt = time.Time{}
+					state.ErrorMessage = ""
+					state.mu.Unlock()
+					continue
+				}
+			}
 
 			if isErr && durationInError >= time.Duration(timeout)*time.Second {
 				logrus.Infof("Auto-recovery: stream %s has been in error for %v. Initiating auto-restart...", slug, durationInError.Round(time.Second))
@@ -796,7 +821,7 @@ func (m *Manager) checkIdleStreams() {
 	var activeSlugs []string
 	for slug, state := range m.processes {
 		state.mu.RLock()
-		if state.Status == "running" || state.Status == "starting" {
+		if state.Status == "running" || state.Status == "starting" || state.Status == "error" {
 			activeSlugs = append(activeSlugs, slug)
 		}
 		state.mu.RUnlock()
@@ -822,12 +847,22 @@ func (m *Manager) checkIdleStreams() {
 			if state != nil {
 				state.mu.RLock()
 				inactiveDuration := time.Since(state.LastActivity)
+				currentStatus := state.Status
 				state.mu.RUnlock()
 
 				if inactiveDuration > time.Duration(timeoutSec)*time.Second {
-					logrus.Infof("Stream %s reached idle timeout (%v), stopping FFmpeg", slug, inactiveDuration)
-					state.AddLog(fmt.Sprintf("Stream reached idle timeout (%v). Stopping FFmpeg.", inactiveDuration.Round(time.Second)))
-					m.StopStream(slug)
+					if currentStatus == "error" {
+						// Stream in error exceeded idle timeout: clear error and transition to idle
+						state.mu.Lock()
+						state.Status = "idle"
+						state.ErrorStartedAt = time.Time{}
+						state.ErrorMessage = ""
+						state.mu.Unlock()
+					} else {
+						logrus.Infof("Stream %s reached idle timeout (%v), stopping FFmpeg", slug, inactiveDuration)
+						state.AddLog(fmt.Sprintf("Stream reached idle timeout (%v). Stopping FFmpeg.", inactiveDuration.Round(time.Second)))
+						m.StopStream(slug)
+					}
 				}
 			}
 		}
