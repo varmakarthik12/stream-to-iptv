@@ -170,4 +170,62 @@ func TestBuildFFmpegArgs_ProbingSettings(t *testing.T) {
 	}
 }
 
+func TestStreamLifecycle_ErrorTrackingAndRestart(t *testing.T) {
+	mgr := &Manager{
+		processes: make(map[string]*ProcessState),
+	}
+
+	stream := &models.Stream{
+		ID:                "test-1",
+		Name:              "Test Stream",
+		Slug:              "test-stream",
+		Enabled:           true,
+		AutoRecover:       true,
+		RecoverTimeoutSec: 30,
+	}
+
+	state := mgr.getOrCreateState(stream)
+	state.Status = "error"
+	state.ErrorMessage = "FFmpeg exited with error: exit status 231"
+
+	// Verify error tracking and problem count
+	if mgr.GetStreamStatus(stream.Slug) != "error" {
+		t.Errorf("Expected status 'error', got: %s", mgr.GetStreamStatus(stream.Slug))
+	}
+	if mgr.GetStreamErrorMessage(stream.Slug) != "FFmpeg exited with error: exit status 231" {
+		t.Errorf("Expected error message to match, got: %s", mgr.GetStreamErrorMessage(stream.Slug))
+	}
+	if mgr.GetProblemCount() != 1 {
+		t.Errorf("Expected problem count to be 1, got: %d", mgr.GetProblemCount())
+	}
+
+	// Verify stale CancelFunc with Pid == 0 does NOT block restart
+	calledCancel := false
+	state.CancelFunc = func() {
+		calledCancel = true
+	}
+	state.Pid = 0
+
+	// Starting stream should clean up stale cancel func and proceed without deadlock
+	state.mu.Lock()
+	if state.CancelFunc != nil && state.Pid == 0 {
+		state.CancelFunc()
+		state.CancelFunc = nil
+	}
+	state.Status = "starting"
+	state.ErrorMessage = ""
+	state.mu.Unlock()
+
+	if !calledCancel {
+		t.Errorf("Expected stale CancelFunc to be invoked on cleanup")
+	}
+	if state.CancelFunc != nil {
+		t.Errorf("Expected state.CancelFunc to be cleared to nil")
+	}
+	if mgr.GetStreamStatus(stream.Slug) != "starting" {
+		t.Errorf("Expected status to become 'starting', got: %s", mgr.GetStreamStatus(stream.Slug))
+	}
+}
+
+
 

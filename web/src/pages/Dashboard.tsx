@@ -73,7 +73,9 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const problemStreams = streams.filter((s) => s.status === 'error');
+  const problemStreams = streams.filter(
+    (s) => s.status === 'error' || (s.status === 'starting' && !!s.error_message)
+  );
 
   return (
     <div>
@@ -237,13 +239,22 @@ export const Dashboard: React.FC = () => {
                       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
                         {st.slug}
                       </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 uppercase font-bold">
-                        Error
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold border ${
+                        st.status === 'error'
+                          ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      }`}>
+                        {st.status === 'error' ? 'Error' : 'Recovering'}
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 font-mono truncate max-w-lg">
                       Source: {st.media_url}
                     </p>
+                    {st.error_message && (
+                      <p className="text-[11px] text-red-400 font-mono truncate max-w-lg mt-0.5" title={st.error_message}>
+                        Error: {st.error_message}
+                      </p>
+                    )}
                     <div className="text-[11px] text-indigo-400 flex items-center space-x-1 pt-1">
                       <ShieldCheck className="w-3.5 h-3.5" />
                       <span>

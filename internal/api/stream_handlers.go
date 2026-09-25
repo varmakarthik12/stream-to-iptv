@@ -29,6 +29,7 @@ func (h *APIHandler) ListStreams(w http.ResponseWriter, r *http.Request) {
 
 	for i := range streams {
 		streams[i].Status = h.streamMgr.GetStreamStatus(streams[i].Slug)
+		streams[i].ErrorMessage = h.streamMgr.GetStreamErrorMessage(streams[i].Slug)
 		streams[i].PlaybackURL = iptv.GetPlaybackURL(baseURL, streams[i].Slug, token)
 		h.resolveStreamLogo(&streams[i], baseURL)
 	}
@@ -53,6 +54,7 @@ func (h *APIHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 	token := settings["iptv_token"]
 
 	st.Status = h.streamMgr.GetStreamStatus(st.Slug)
+	st.ErrorMessage = h.streamMgr.GetStreamErrorMessage(st.Slug)
 	st.PlaybackURL = iptv.GetPlaybackURL(baseURL, st.Slug, token)
 	h.resolveStreamLogo(st, baseURL)
 

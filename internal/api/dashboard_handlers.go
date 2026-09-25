@@ -47,12 +47,14 @@ func (h *APIHandler) GetSystemStatus(w http.ResponseWriter, r *http.Request) {
 	var problemStreams []map[string]interface{}
 	for _, st := range allStreams {
 		status := h.streamMgr.GetStreamStatus(st.Slug)
-		if status == "error" {
+		errMsg := h.streamMgr.GetStreamErrorMessage(st.Slug)
+		if status == "error" || (status == "starting" && errMsg != "") {
 			problemStreams = append(problemStreams, map[string]interface{}{
 				"id":                  st.ID,
 				"name":                st.Name,
 				"slug":                st.Slug,
 				"status":              status,
+				"error_message":       errMsg,
 				"auto_recover":        st.AutoRecover,
 				"recover_timeout_sec": st.RecoverTimeoutSec,
 			})

@@ -266,6 +266,17 @@ func (m *Manager) GetStreamStatus(slug string) string {
 	return "idle"
 }
 
+func (m *Manager) GetStreamErrorMessage(slug string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if state, ok := m.processes[slug]; ok {
+		state.mu.RLock()
+		defer state.mu.RUnlock()
+		return state.ErrorMessage
+	}
+	return ""
+}
+
 func (m *Manager) GetStreamLogs(slug string) []models.StreamLogEntry {
 	m.mu.RLock()
 	state, ok := m.processes[slug]
@@ -288,10 +299,22 @@ func (m *Manager) Touch(slug string) {
 		state.mu.Lock()
 		state.LastActivity = time.Now()
 		status := state.Status
+		errorStarted := state.ErrorStartedAt
 		state.mu.Unlock()
 
 		if status == "running" || status == "starting" {
 			return
+		}
+		if status == "error" {
+			// Do not thrash on every rapid HTTP poll during error state.
+			// Allow Auto-Recovery or manual restart to handle it, or retry after threshold.
+			timeoutSec := 30
+			if st, err := m.repo.GetStreamBySlug(slug); err == nil && st.RecoverTimeoutSec > 0 {
+				timeoutSec = st.RecoverTimeoutSec
+			}
+			if time.Since(errorStarted) < time.Duration(timeoutSec)*time.Second {
+				return
+			}
 		}
 	}
 
@@ -326,16 +349,16 @@ func (m *Manager) StartStream(stream *models.Stream) error {
 
 	state.mu.Lock()
 	// Guard: only one goroutine may start FFmpeg at a time.
-	// "starting" is set by Touch() before this goroutine runs, or by checkAutoRecover().
-	// Either way, a second concurrent caller must bail out.
+	// If a live process is running (Pid > 0) with an active cancel func, bail out.
 	if state.Status == "running" || state.Status == "starting" {
-		// If this was a direct call (not via Touch), we still need to launch FFmpeg.
-		// Detect: if CancelFunc is nil, no FFmpeg goroutine is actually running yet.
-		if state.CancelFunc != nil {
+		if state.CancelFunc != nil && state.Pid > 0 {
 			state.mu.Unlock()
 			return nil
 		}
-		// No cancel func means no goroutine is running — fall through to start one.
+	}
+	if state.CancelFunc != nil && state.Pid == 0 {
+		state.CancelFunc()
+		state.CancelFunc = nil
 	}
 	state.Status = "starting"
 	state.StartedAt = time.Now()
@@ -423,6 +446,13 @@ func (m *Manager) cleanupStreamDir(slug string) {
 }
 
 func (m *Manager) runFFmpegLoop(ctx context.Context, stream *models.Stream, state *ProcessState, streamDir string) {
+	defer func() {
+		state.mu.Lock()
+		state.CancelFunc = nil
+		state.Pid = 0
+		state.mu.Unlock()
+	}()
+
 	retryCount := 0
 	maxRetries := 5
 
@@ -721,6 +751,10 @@ func (m *Manager) checkAutoRecover() {
 				state.mu.Lock()
 				state.ErrorStartedAt = time.Time{}
 				state.Status = "starting"
+				if state.CancelFunc != nil && state.Pid == 0 {
+					state.CancelFunc()
+					state.CancelFunc = nil
+				}
 				state.mu.Unlock()
 
 				go m.StartStream(stream)
@@ -749,7 +783,7 @@ func (m *Manager) GetProblemCount() int {
 	count := 0
 	for _, state := range m.processes {
 		state.mu.RLock()
-		if state.Status == "error" {
+		if state.Status == "error" || (state.Status == "starting" && state.ErrorMessage != "") {
 			count++
 		}
 		state.mu.RUnlock()

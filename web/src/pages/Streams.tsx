@@ -352,7 +352,7 @@ export const Streams: React.FC = () => {
 
                         {/* Status Column */}
                         <td className="py-3 px-4">
-                          <div className="flex items-center space-x-1.5">
+                          <div className="flex items-center space-x-1.5" title={st.error_message || undefined}>
                             <span className={`w-2 h-2 rounded-full ${
                               isRunning
                                 ? 'bg-emerald-400 animate-pulse'
@@ -374,6 +374,11 @@ export const Streams: React.FC = () => {
                               {status}
                             </span>
                           </div>
+                          {st.error_message && isError && (
+                            <p className="text-[10px] text-red-400/80 font-mono truncate max-w-[140px] mt-0.5" title={st.error_message}>
+                              {st.error_message}
+                            </p>
+                          )}
                         </td>
 
                         {/* Actions Column */}

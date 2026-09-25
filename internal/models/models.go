@@ -91,6 +91,7 @@ type Stream struct {
 	Categories       []Category        `json:"categories,omitempty"`
 	EPGMapping       *StreamEPGMapping `json:"epg_mapping,omitempty"`
 	Status           string            `json:"status,omitempty"` // idle, running, starting, error, stopped
+	ErrorMessage     string            `json:"error_message,omitempty"`
 	PlaybackURL      string            `json:"playback_url,omitempty"`
 }
 

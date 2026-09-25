@@ -80,6 +80,7 @@ export interface Stream {
   category_ids?: string[];
   epg_mapping?: StreamEPGMapping;
   status?: 'idle' | 'starting' | 'running' | 'error' | 'stopped';
+  error_message?: string;
   playback_url?: string;
 }
 
@@ -101,6 +102,7 @@ export interface SystemStatus {
     name: string;
     slug: string;
     status: string;
+    error_message?: string;
     auto_recover: boolean;
     recover_timeout_sec: number;
   }>;
