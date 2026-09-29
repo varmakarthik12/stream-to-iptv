@@ -69,12 +69,50 @@ export const App: React.FC = () => {
           <Navbar user={user} onLogout={() => setUser(null)} />
           <main className="flex-1">
             <Routes>
+              {/* Streams and Modal Routes */}
               <Route path="/" element={<Streams />} />
+              <Route path="/streams" element={<Streams />} />
+              <Route path="/streams/new" element={<Streams />} />
+              <Route path="/streams/:id/edit" element={<Streams />} />
+              <Route path="/streams/:id/logs" element={<Streams />} />
+              <Route path="/streams/:id/play" element={<Streams />} />
+              <Route path="/streams/edit/:id" element={<Streams />} />
+              <Route path="/streams/logs/:id" element={<Streams />} />
+              <Route path="/streams/play/:id" element={<Streams />} />
+
+              {/* IPTV Player Setup Guide Modal Route */}
+              <Route path="/guide" element={<Streams />} />
+              <Route path="/setup-guide" element={<Streams />} />
+
+              {/* Dashboard and Modal Routes */}
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard/guide" element={<Dashboard />} />
+              <Route path="/dashboard/setup-guide" element={<Dashboard />} />
+              <Route path="/dashboard/streams/:id/logs" element={<Dashboard />} />
+              <Route path="/dashboard/logs/:id" element={<Dashboard />} />
+
+              {/* Categories and Subroutes */}
               <Route path="/categories" element={<Categories />} />
+              <Route path="/categories/new" element={<Categories />} />
+              <Route path="/categories/:id/edit" element={<Categories />} />
+              <Route path="/categories/edit/:id" element={<Categories />} />
+
+              {/* Logos and Subroutes */}
               <Route path="/logos" element={<Logos />} />
+              <Route path="/logos/upload" element={<Logos />} />
+              <Route path="/logos/import" element={<Logos />} />
+
+              {/* EPG Sources and Subroutes */}
               <Route path="/epg" element={<EPG />} />
+              <Route path="/epg/new" element={<EPG />} />
+              <Route path="/epg/bulk" element={<EPG />} />
+              <Route path="/epg/:id/edit" element={<EPG />} />
+              <Route path="/epg/edit/:id" element={<EPG />} />
+
+              {/* Settings */}
               <Route path="/settings" element={<Settings />} />
+
+              {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

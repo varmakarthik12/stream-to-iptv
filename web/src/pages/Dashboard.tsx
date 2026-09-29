@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
   Database,
@@ -20,11 +20,31 @@ import { IPTVBanner } from '../components/IPTVBanner';
 import { StreamLogsModal } from '../components/StreamLogsModal';
 
 export const Dashboard: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [streams, setStreams] = useState<Stream[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewingLogsStream, setViewingLogsStream] = useState<Stream | null>(null);
   const [recoveringId, setRecoveringId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const path = location.pathname;
+    const logsMatch = path.match(/^\/dashboard\/(?:streams\/([^\/]+)\/logs|logs\/([^\/]+))$/);
+    if (logsMatch) {
+      const id = logsMatch[1] || logsMatch[2];
+      const found = streams.find((s) => s.id === id || s.slug === id);
+      if (found) {
+        setViewingLogsStream(found);
+      } else if (!loading) {
+        api.getStream(id)
+          .then((st) => setViewingLogsStream(st))
+          .catch(() => navigate('/dashboard', { replace: true }));
+      }
+    } else if (path === '/dashboard') {
+      setViewingLogsStream(null);
+    }
+  }, [location.pathname, streams, loading, navigate]);
 
   useEffect(() => {
     loadData();
@@ -274,7 +294,7 @@ export const Dashboard: React.FC = () => {
                     </button>
 
                     <button
-                      onClick={() => setViewingLogsStream(st)}
+                      onClick={() => navigate(`/dashboard/streams/${st.id}/logs`)}
                       className="flex items-center space-x-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700"
                     >
                       <Terminal className="w-3.5 h-3.5" />
@@ -330,7 +350,12 @@ export const Dashboard: React.FC = () => {
       {viewingLogsStream && (
         <StreamLogsModal
           stream={viewingLogsStream}
-          onClose={() => setViewingLogsStream(null)}
+          onClose={() => {
+            setViewingLogsStream(null);
+            if (location.pathname.includes('/logs')) {
+              navigate('/dashboard', { replace: true });
+            }
+          }}
         />
       )}
     </div>

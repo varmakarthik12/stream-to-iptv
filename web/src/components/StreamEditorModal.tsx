@@ -270,15 +270,15 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full my-8 shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full my-4 sm:my-8 shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-900/90">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
               <Film className="w-4 h-4" />
             </div>
-            <h3 className="text-lg font-bold text-white">
+            <h3 className="text-base sm:text-lg font-bold text-white">
               {stream ? 'Edit Stream Channel' : 'Add New Stream Channel'}
             </h3>
           </div>
@@ -288,7 +288,7 @@ export const StreamEditorModal: React.FC<StreamEditorModalProps> = ({ stream, on
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSave} className="p-6 space-y-6 overflow-y-auto max-h-[75vh]">
+        <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-6 overflow-y-auto max-h-[80vh]">
           {error && (
             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center space-x-2 text-red-400 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0" />

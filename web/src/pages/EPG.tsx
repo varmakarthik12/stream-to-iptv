@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, Plus, RefreshCw, Trash2, Edit, CheckCircle2, AlertCircle, Copy, Check, Clock, Radio } from 'lucide-react';
 import { api, EPGSource, SystemStatus } from '../api';
 import { copyToClipboard } from '../utils/clipboard';
 
 export const EPG: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [sources, setSources] = useState<EPGSource[]>([]);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -21,6 +24,50 @@ export const EPG: React.FC = () => {
 
   const [copiedXml, setCopiedXml] = useState(false);
   const [copiedGz, setCopiedGz] = useState(false);
+
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === '/epg/bulk') {
+      setAddMode('bulk');
+      setEditingSource(null);
+      return;
+    }
+    if (path === '/epg/new') {
+      setAddMode('single');
+      setEditingSource(null);
+      setName('');
+      setUrl('');
+      setRefreshInterval(24);
+      return;
+    }
+    const editMatch = path.match(/^\/epg\/(?:([^\/]+)\/edit|edit\/([^\/]+))$/);
+    if (editMatch) {
+      const id = editMatch[1] || editMatch[2];
+      const found = sources.find((s) => s.id === id);
+      if (found) {
+        if (editingSource?.id !== found.id) {
+          setEditingSource(found);
+          setName(found.name);
+          setUrl(found.url);
+          setRefreshInterval(found.refresh_interval_hours);
+          setAddMode('single');
+        }
+      } else if (!loading) {
+        navigate('/epg', { replace: true });
+      }
+      return;
+    }
+
+    if (path === '/epg') {
+      if (editingSource !== null) {
+        setEditingSource(null);
+        setName('');
+        setUrl('');
+        setRefreshInterval(24);
+        setAddMode('single');
+      }
+    }
+  }, [location.pathname, sources, loading, editingSource, navigate]);
 
   useEffect(() => {
     loadData();
@@ -77,6 +124,7 @@ export const EPG: React.FC = () => {
       setUrl('');
       setRefreshInterval(24);
       setEditingSource(null);
+      navigate('/epg');
       loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to save EPG source');
@@ -134,6 +182,7 @@ export const EPG: React.FC = () => {
       await api.bulkCreateEPGSources(sourcesToCreate);
       setBulkText('');
       setAddMode('single');
+      navigate('/epg');
       loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to add multiple EPG sources');
@@ -166,6 +215,7 @@ export const EPG: React.FC = () => {
     setName(src.name);
     setUrl(src.url);
     setRefreshInterval(src.refresh_interval_hours);
+    navigate(`/epg/${src.id}/edit`);
   };
 
   const serverBase = systemStatus?.base_url || window.location.origin;
@@ -250,7 +300,10 @@ export const EPG: React.FC = () => {
               <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setAddMode('single')}
+                  onClick={() => {
+                    setAddMode('single');
+                    navigate('/epg/new');
+                  }}
                   className={`px-2.5 py-1 text-[11px] rounded-lg font-medium transition-all ${
                     addMode === 'single' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
                   }`}
@@ -259,7 +312,10 @@ export const EPG: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAddMode('bulk')}
+                  onClick={() => {
+                    setAddMode('bulk');
+                    navigate('/epg/bulk');
+                  }}
                   className={`px-2.5 py-1 text-[11px] rounded-lg font-medium transition-all ${
                     addMode === 'bulk' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
                   }`}
@@ -381,6 +437,7 @@ export const EPG: React.FC = () => {
                     setName('');
                     setUrl('');
                     setRefreshInterval(24);
+                    navigate('/epg');
                   }}
                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
                 >

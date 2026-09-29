@@ -45,26 +45,34 @@ export const StreamLogsModal: React.FC<StreamLogsModalProps> = ({ stream, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full flex flex-col h-[650px] shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full flex flex-col h-[650px] max-h-[90vh] shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
-              <Terminal className="w-4 h-4" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-800 bg-slate-900/90">
+          <div className="flex items-center justify-between sm:justify-start space-x-3">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20 shrink-0">
+                <Terminal className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-100 flex items-center space-x-2 text-sm sm:text-base">
+                  <span className="truncate max-w-[180px] sm:max-w-xs">{stream.name}</span>
+                  <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded font-mono bg-slate-800 text-slate-400">
+                    {stream.slug}
+                  </span>
+                </h3>
+                <p className="text-[11px] sm:text-xs text-slate-400">Status: <span className="uppercase font-semibold text-indigo-400">{stream.status || 'idle'}</span></p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-semibold text-slate-100 flex items-center space-x-2">
-                <span>FFmpeg Logs: {stream.name}</span>
-                <span className="text-xs px-2 py-0.5 rounded font-mono bg-slate-800 text-slate-400">
-                  {stream.slug}
-                </span>
-              </h3>
-              <p className="text-xs text-slate-400">Status: <span className="uppercase font-semibold text-indigo-400">{stream.status || 'idle'}</span></p>
-            </div>
+            <button
+              onClick={onClose}
+              className="sm:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center justify-end space-x-2 sm:space-x-3">
             <label className="flex items-center space-x-2 text-xs text-slate-400 cursor-pointer">
               <input
                 type="checkbox"
@@ -72,7 +80,7 @@ export const StreamLogsModal: React.FC<StreamLogsModalProps> = ({ stream, onClos
                 onChange={(e) => setAutoRefresh(e.target.checked)}
                 className="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0"
               />
-              <span>Auto-refresh (2s)</span>
+              <span className="text-[11px] sm:text-xs">Auto-refresh</span>
             </label>
 
             <button
@@ -93,7 +101,7 @@ export const StreamLogsModal: React.FC<StreamLogsModalProps> = ({ stream, onClos
 
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+              className="hidden sm:block p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800"
             >
               <X className="w-4 h-4" />
             </button>

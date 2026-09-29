@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Plus, FolderTree, Edit, Trash2, Layers, AlertCircle } from 'lucide-react';
 import { api, Category } from '../api';
 
 export const Categories: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
@@ -13,6 +16,30 @@ export const Categories: React.FC = () => {
   useEffect(() => {
     loadCategories();
   }, []);
+
+  useEffect(() => {
+    const path = location.pathname;
+    const editMatch = path.match(/^\/categories\/(?:([^\/]+)\/edit|edit\/([^\/]+))$/);
+    if (editMatch) {
+      const id = editMatch[1] || editMatch[2];
+      const found = categories.find((c) => c.id === id || c.slug === id);
+      if (found) {
+        if (editingCategory?.id !== found.id) {
+          setEditingCategory(found);
+          setName(found.name);
+          setSortOrder(found.sort_order);
+        }
+      } else if (!loading) {
+        navigate('/categories', { replace: true });
+      }
+    } else if (path === '/categories' || path === '/categories/new') {
+      if (editingCategory !== null) {
+        setEditingCategory(null);
+        setName('');
+        setSortOrder(0);
+      }
+    }
+  }, [location.pathname, categories, loading, editingCategory, navigate]);
 
   const loadCategories = async () => {
     setLoading(true);
@@ -46,6 +73,7 @@ export const Categories: React.FC = () => {
       setName('');
       setSortOrder(0);
       setEditingCategory(null);
+      navigate('/categories');
       loadCategories();
     } catch (err: any) {
       setError(err.message || 'Failed to save category');
@@ -56,6 +84,7 @@ export const Categories: React.FC = () => {
     setEditingCategory(cat);
     setName(cat.name);
     setSortOrder(cat.sort_order);
+    navigate(`/categories/${cat.id}/edit`);
   };
 
   const handleDelete = async (cat: Category) => {
@@ -132,6 +161,7 @@ export const Categories: React.FC = () => {
                     setEditingCategory(null);
                     setName('');
                     setSortOrder(0);
+                    navigate('/categories');
                   }}
                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
                 >

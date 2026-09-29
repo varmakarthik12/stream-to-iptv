@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Image as ImageIcon, Upload, Globe, Copy, Check, Trash2, Plus, AlertCircle } from 'lucide-react';
 import { api, Logo } from '../api';
 import { copyToClipboard } from '../utils/clipboard';
 
 export const Logos: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [logos, setLogos] = useState<Logo[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'upload' | 'import'>('upload');
@@ -23,6 +26,15 @@ export const Logos: React.FC = () => {
   useEffect(() => {
     loadLogos();
   }, []);
+
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === '/logos/upload') {
+      setTab('upload');
+    } else if (path === '/logos/import') {
+      setTab('import');
+    }
+  }, [location.pathname]);
 
   const loadLogos = async () => {
     setLoading(true);
@@ -110,7 +122,10 @@ export const Logos: React.FC = () => {
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl h-fit">
           <div className="flex space-x-2 border-b border-slate-800 pb-3 mb-4">
             <button
-              onClick={() => setTab('upload')}
+              onClick={() => {
+                setTab('upload');
+                navigate('/logos/upload');
+              }}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                 tab === 'upload' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
@@ -119,7 +134,10 @@ export const Logos: React.FC = () => {
               <span>Upload Local Logo</span>
             </button>
             <button
-              onClick={() => setTab('import')}
+              onClick={() => {
+                setTab('import');
+                navigate('/logos/import');
+              }}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                 tab === 'import' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}

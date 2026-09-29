@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Play, Square, Terminal, Edit, Trash2, Copy, Check, Radio, Tv, Layers, ExternalLink, RefreshCw, MonitorPlay } from 'lucide-react';
 import { api, Stream, Category } from '../api';
 import { copyToClipboard } from '../utils/clipboard';
@@ -37,11 +38,81 @@ export const Streams: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
 
+  // Router
+  const location = useLocation();
+  const navigate = useNavigate();
+
   // Modals
   const [editingStream, setEditingStream] = useState<Stream | null | undefined>(undefined);
   const [viewingLogsStream, setViewingLogsStream] = useState<Stream | null>(null);
   const [playingStream, setPlayingStream] = useState<Stream | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Sync modal state with current route
+  useEffect(() => {
+    const path = location.pathname;
+
+    if (path === '/streams/new' || path === '/new') {
+      setEditingStream(null);
+      setViewingLogsStream(null);
+      setPlayingStream(null);
+      return;
+    }
+
+    const editMatch = path.match(/^\/streams\/(?:([^\/]+)\/edit|edit\/([^\/]+))$/);
+    if (editMatch) {
+      const id = editMatch[1] || editMatch[2];
+      const found = streams.find((s) => s.id === id || s.slug === id);
+      if (found) {
+        setEditingStream(found);
+      } else if (!loading) {
+        api.getStream(id)
+          .then((st) => setEditingStream(st))
+          .catch(() => navigate('/streams', { replace: true }));
+      }
+      setViewingLogsStream(null);
+      setPlayingStream(null);
+      return;
+    }
+
+    const logsMatch = path.match(/^\/streams\/(?:([^\/]+)\/logs|logs\/([^\/]+))$/);
+    if (logsMatch) {
+      const id = logsMatch[1] || logsMatch[2];
+      const found = streams.find((s) => s.id === id || s.slug === id);
+      if (found) {
+        setViewingLogsStream(found);
+      } else if (!loading) {
+        api.getStream(id)
+          .then((st) => setViewingLogsStream(st))
+          .catch(() => navigate('/streams', { replace: true }));
+      }
+      setEditingStream(undefined);
+      setPlayingStream(null);
+      return;
+    }
+
+    const playMatch = path.match(/^\/streams\/(?:([^\/]+)\/play|play\/([^\/]+))$/);
+    if (playMatch) {
+      const id = playMatch[1] || playMatch[2];
+      const found = streams.find((s) => s.id === id || s.slug === id);
+      if (found) {
+        setPlayingStream(found);
+      } else if (!loading) {
+        api.getStream(id)
+          .then((st) => setPlayingStream(st))
+          .catch(() => navigate('/streams', { replace: true }));
+      }
+      setEditingStream(undefined);
+      setViewingLogsStream(null);
+      return;
+    }
+
+    if (path === '/' || path === '/streams') {
+      setEditingStream(undefined);
+      setViewingLogsStream(null);
+      setPlayingStream(null);
+    }
+  }, [location.pathname, streams, loading, navigate]);
 
   useEffect(() => {
     loadData();
@@ -170,7 +241,7 @@ export const Streams: React.FC = () => {
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button
-              onClick={() => setEditingStream(null)}
+              onClick={() => navigate('/streams/new')}
               className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/20 transition-all w-full sm:w-auto justify-center"
             >
               <Plus className="w-4 h-4" />
@@ -240,7 +311,7 @@ export const Streams: React.FC = () => {
                 : 'Get started by creating your first IPTV stream channel.'}
             </p>
             <button
-              onClick={() => setEditingStream(null)}
+              onClick={() => navigate('/streams/new')}
               className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-semibold"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -385,7 +456,7 @@ export const Streams: React.FC = () => {
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end space-x-1">
                             <button
-                              onClick={() => setPlayingStream(st)}
+                              onClick={() => navigate(`/streams/${st.id}/play`)}
                               title="Preview live channel in browser"
                               className="p-1.5 rounded-lg text-indigo-400 hover:text-white hover:bg-indigo-600/20 transition-colors"
                             >
@@ -411,7 +482,7 @@ export const Streams: React.FC = () => {
                             )}
 
                             <button
-                              onClick={() => setViewingLogsStream(st)}
+                              onClick={() => navigate(`/streams/${st.id}/logs`)}
                               title="View FFmpeg logs"
                               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
                             >
@@ -419,7 +490,7 @@ export const Streams: React.FC = () => {
                             </button>
 
                             <button
-                              onClick={() => setEditingStream(st)}
+                              onClick={() => navigate(`/streams/${st.id}/edit`)}
                               title="Edit stream settings"
                               className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors"
                             >
@@ -449,17 +520,30 @@ export const Streams: React.FC = () => {
       {playingStream && (
         <StreamPlayerModal
           stream={playingStream}
-          onClose={() => setPlayingStream(null)}
+          onClose={() => {
+            setPlayingStream(null);
+            if (location.pathname.includes('/play')) {
+              navigate('/streams', { replace: true });
+            }
+          }}
         />
       )}
 
       {editingStream !== undefined && (
         <StreamEditorModal
           stream={editingStream}
-          onClose={() => setEditingStream(undefined)}
+          onClose={() => {
+            setEditingStream(undefined);
+            if (location.pathname.includes('/edit') || location.pathname.includes('/new')) {
+              navigate('/streams', { replace: true });
+            }
+          }}
           onSave={() => {
             setEditingStream(undefined);
             loadData();
+            if (location.pathname.includes('/edit') || location.pathname.includes('/new')) {
+              navigate('/streams', { replace: true });
+            }
           }}
         />
       )}
@@ -467,7 +551,12 @@ export const Streams: React.FC = () => {
       {viewingLogsStream && (
         <StreamLogsModal
           stream={viewingLogsStream}
-          onClose={() => setViewingLogsStream(null)}
+          onClose={() => {
+            setViewingLogsStream(null);
+            if (location.pathname.includes('/logs')) {
+              navigate('/streams', { replace: true });
+            }
+          }}
         />
       )}
     </div>

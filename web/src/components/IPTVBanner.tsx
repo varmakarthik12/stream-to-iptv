@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, Check, Info, Radio, ExternalLink, HelpCircle } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Copy, Check, Info, Radio, ExternalLink, HelpCircle, X } from 'lucide-react';
 import { api, SystemStatus } from '../api';
 import { copyToClipboard } from '../utils/clipboard';
 
 export const IPTVBanner: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [copiedM3U, setCopiedM3U] = useState(false);
   const [copiedEPG, setCopiedEPG] = useState(false);
@@ -12,6 +15,19 @@ export const IPTVBanner: React.FC = () => {
   useEffect(() => {
     loadStatus();
   }, []);
+
+  useEffect(() => {
+    if (
+      location.pathname === '/guide' ||
+      location.pathname === '/setup-guide' ||
+      location.pathname === '/dashboard/guide' ||
+      location.pathname === '/dashboard/setup-guide'
+    ) {
+      setShowHelp(true);
+    } else if (showHelp) {
+      setShowHelp(false);
+    }
+  }, [location.pathname]);
 
   const loadStatus = async () => {
     try {
@@ -30,6 +46,24 @@ export const IPTVBanner: React.FC = () => {
     } else {
       setCopiedEPG(true);
       setTimeout(() => setCopiedEPG(false), 2000);
+    }
+  };
+
+  const handleOpenHelp = () => {
+    setShowHelp(true);
+    if (location.pathname.startsWith('/dashboard')) {
+      navigate('/dashboard/guide');
+    } else {
+      navigate('/guide');
+    }
+  };
+
+  const handleCloseHelp = () => {
+    setShowHelp(false);
+    if (location.pathname === '/dashboard/guide' || location.pathname === '/dashboard/setup-guide') {
+      navigate('/dashboard', { replace: true });
+    } else if (location.pathname === '/guide' || location.pathname === '/setup-guide') {
+      navigate('/streams', { replace: true });
     }
   };
 
@@ -85,7 +119,7 @@ export const IPTVBanner: React.FC = () => {
 
           {/* Help Button */}
           <button
-            onClick={() => setShowHelp(true)}
+            onClick={handleOpenHelp}
             title="IPTV Player Setup Guide"
             className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg border border-slate-700/60 transition-colors"
           >
@@ -96,12 +130,20 @@ export const IPTVBanner: React.FC = () => {
 
       {/* Setup Guide Modal */}
       {showHelp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
-            <h3 className="text-lg font-bold text-white mb-2 flex items-center space-x-2">
-              <Radio className="w-5 h-5 text-indigo-400" />
-              <span>IPTV Player Setup Guide</span>
-            </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-bold text-white flex items-center space-x-2">
+                <Radio className="w-5 h-5 text-indigo-400" />
+                <span>IPTV Player Setup Guide</span>
+              </h3>
+              <button
+                onClick={handleCloseHelp}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
             <p className="text-xs text-slate-400 mb-4">
               Add your generated M3U playlist and EPG XML to your preferred IPTV player:
             </p>
@@ -133,7 +175,7 @@ export const IPTVBanner: React.FC = () => {
 
             <div className="mt-6 flex justify-end">
               <button
-                onClick={() => setShowHelp(false)}
+                onClick={handleCloseHelp}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold"
               >
                 Close Guide
